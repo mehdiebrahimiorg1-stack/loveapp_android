@@ -37,16 +37,25 @@ class _CodeScreenState extends State<CodeScreen> {
   Future<void> _enter() async {
     setState(() => _loading = true);
     final code = _controller.text.trim().toUpperCase();
-    final res = await http.get(Uri.parse('$baseUrl/api/playlists/$code/'));
-    setState(() => _loading = false);
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      Navigator.push(context, MaterialPageRoute(
-        builder: (_) => PlaylistScreen(data: data),
-      ));
-    } else {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/playlists/$code/'),
+      ).timeout(const Duration(seconds: 10));
+      setState(() => _loading = false);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => PlaylistScreen(data: data),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطا: ${res.statusCode}')),
+        );
+      }
+    } catch (e) {
+      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('کد اشتباهه!')),
+        SnackBar(content: Text('خطا: $e')),
       );
     }
   }
