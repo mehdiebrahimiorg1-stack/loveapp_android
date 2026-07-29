@@ -1,21 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart : io'
-
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
-class MyHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-  }
-}
-
 void main() {
-  HttpOverrides.global = MyHttpOverrides();
   runApp(const MyApp());
 }
 
@@ -51,7 +40,8 @@ class _CodeScreenState extends State<CodeScreen> {
     try {
       final res = await http.get(
         Uri.parse('$baseUrl/api/playlists/$code/'),
-      ).timeout(const Duration(seconds: 10));
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 15));
       setState(() => _loading = false);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
