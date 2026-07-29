@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart : io';
+import 'dart : io'
+
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
+  HttpOverrides.global = MyHttpOverrides();
   runApp(const MyApp());
 }
 
@@ -39,21 +49,18 @@ class _CodeScreenState extends State<CodeScreen> {
     setState(() => _loading = true);
     final code = _controller.text.trim().toUpperCase();
     try {
-      final client = HttpClient()
-        ..badCertificateCallback = (cert, host, port) => true;
-      final request = await client.getUrl(
-        Uri.parse('$baseUrl/api/playlists/$code/'));
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/playlists/$code/'),
+      ).timeout(const Duration(seconds: 10));
       setState(() => _loading = false);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(body);
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => PlaylistScreen(data: data),
         ));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('کد اشتباهه!')),
+          const SnackBar(content: Text('کد اشتباهه!')),
         );
       }
     } catch (e) {
@@ -63,6 +70,7 @@ class _CodeScreenState extends State<CodeScreen> {
       );
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
