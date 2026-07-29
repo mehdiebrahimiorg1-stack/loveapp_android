@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart : io';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
@@ -38,18 +39,21 @@ class _CodeScreenState extends State<CodeScreen> {
     setState(() => _loading = true);
     final code = _controller.text.trim().toUpperCase();
     try {
-      final res = await http.get(
-        Uri.parse('$baseUrl/api/playlists/$code/'),
-      ).timeout(const Duration(seconds: 10));
+      final client = HttpClient()
+        ..badCertificateCallback = (cert, host, port) => true;
+      final request = await client.getUrl(
+        Uri.parse('$baseUrl/api/playlists/$code/'));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
       setState(() => _loading = false);
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(body);
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => PlaylistScreen(data: data),
         ));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا: ${res.statusCode}')),
+          SnackBar(content: Text('کد اشتباهه!')),
         );
       }
     } catch (e) {
@@ -59,7 +63,6 @@ class _CodeScreenState extends State<CodeScreen> {
       );
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
