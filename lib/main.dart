@@ -8,8 +8,18 @@ import 'dart:io';
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
 void main() {
+  HttpOverrides.global = MyHttpOverrides();
   runApp(const MyApp());
 }
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -129,7 +139,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
   bool _loading = false;
   String? _code;
   List<XFile> _images = [];
-  XFile? _song;
+  List<XFile> _song = []
   final _picker = ImagePicker();
   String _status = '';
 
@@ -145,18 +155,16 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
   }
 
   Future<void> _pickSong() async {
-    // انتخاب فایل موزیک از گالری
-    final picked = await _picker.pickMedia();
-    if (picked != null) {
-      // فقط فایل‌های صوتی قبول میکنیم
-      final ext = picked.path.split('.').last.toLowerCase();
-      if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
-        setState(() => _song = picked);
-      } else {
-        _snack('لطفاً یه فایل موزیک انتخاب کن (mp3, wav, ...)');
-      }
+  final picked = await _picker.pickMedia();
+  if (picked != null) {
+    final ext = picked.path.split('.').last.toLowerCase();
+    if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
+      setState(() => _songs.add(picked));
+    } else {
+      _snack('لطفاً یه فایل موزیک انتخاب کن');
     }
   }
+}
 
   Future<void> _create() async {
     if (_titleController.text.isEmpty) {
@@ -205,18 +213,16 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
       }
 
       // مرحله ۳: آپلود موزیک
-      if (_song != null) {
-        setState(() => _status = 'آپلود موزیک...');
+      for (int i = 0; i < _songs.length; i++) {
+        setState(() => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('$baseUrl/api/playlists/$code/add-song/'),
         );
         request.files.add(
-          await http.MultipartFile.fromPath('file', _song!.path)
+          await http.MultipartFile.fromPath('file', _songs[i].path)
         );
-        request.fields['title'] = _songTitleController.text.isEmpty
-          ? 'موزیک'
-          : _songTitleController.text;
+        request.fields['title'] = _songs[i].path.split('/').last;
         final response = await request.send().timeout(const Duration(seconds: 60));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
@@ -351,30 +357,29 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               const SizedBox(height: 16),
 
               // بخش موزیک
-              const Text('🎵 موزیک', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(':musical_note: موزیک', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pickSong,
                 icon: const Icon(Icons.music_note, color: Colors.pink),
-                label: Text(_song == null
-                  ? 'انتخاب موزیک از گالری'
-                  : _song!.path.split('/').last),
+                label: const Text('+ اضافه کردن موزیک'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.pink,
                   side: const BorderSide(color: Colors.pink),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
-              if (_song != null) ...[
+              if (_songs.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _songTitleController,
-                  decoration: InputDecoration(
-                    labelText: 'نام موزیک',
-                    prefixIcon: const Icon(Icons.music_note, color: Colors.pink),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ..._songs.asMap().entries.map((entry) => ListTile(
+                  leading: const Icon(Icons.music_note, color: Colors.pink),
+                  title: Text(entry.value.path.split('/').last,
+                    overflow: TextOverflow.ellipsis),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red),
+                    onPressed: () => setState(() => _songs.removeAt(entry.key)),
                   ),
-                ),
+                )),
               ],
 
               const SizedBox(height: 24),
