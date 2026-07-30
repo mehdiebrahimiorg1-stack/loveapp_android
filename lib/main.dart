@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 
-const String baseUrl = 'http://loveapp-production-f89f.up.railway.app';
+const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
+
+// ایجاد HTTP client با SSL bypass
+http.Client _createHttpClient() {
+  final ioClient = HttpClient()
+    ..badCertificateCallback =
+        (X509Certificate cert, String host, int port) => true;
+  return IOClient(ioClient);
+}
 
 void main() {
   HttpOverrides.global = MyHttpOverrides();
@@ -50,7 +59,8 @@ class _CodeScreenState extends State<CodeScreen> {
     setState(() => _loading = true);
     final code = _controller.text.trim().toUpperCase();
     try {
-      final res = await http.get(
+      final client = _createHttpClient();
+      final res = await client.get(
         Uri.parse('$baseUrl/api/playlists/$code/'),
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 15));
@@ -177,8 +187,10 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
     });
 
     try {
+      final client = _createHttpClient();
+
       // مرحله ۱: ساخت پلی‌لیست
-      final res = await http.post(
+      final res = await client.post(
         Uri.parse('$baseUrl/api/playlists/create/'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -206,8 +218,8 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         request.files.add(
             await http.MultipartFile.fromPath('image', _images[i].path));
         request.fields['caption'] = '';
-        final response =
-            await request.send().timeout(const Duration(seconds: 30));
+        final response = await client.send(request)
+            .timeout(const Duration(seconds: 30));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
           _snack('خطا در آپلود عکس ${i + 1}: $body');
@@ -225,8 +237,8 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         request.files.add(
             await http.MultipartFile.fromPath('file', _songs[i].path));
         request.fields['title'] = _songs[i].path.split('/').last;
-        final response =
-            await request.send().timeout(const Duration(seconds: 60));
+        final response = await client.send(request)
+            .timeout(const Duration(seconds: 60));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
           _snack('خطا در آپلود موزیک ${i + 1}: $body');
