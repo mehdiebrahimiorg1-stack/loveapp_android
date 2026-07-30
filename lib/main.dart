@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 
-const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
+const String baseUrl = 'http://loveapp-production-f89f.up.railway.app';
 
 void main() {
   HttpOverrides.global = MyHttpOverrides();
