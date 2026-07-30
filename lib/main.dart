@@ -505,13 +505,42 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Image.network(
-                        imgUrl,
-                        width: double.infinity,
-                        height: 250,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.broken_image, size: 100),
+                      GestureDetector(
+                        onTap: isUnlocked ? () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => Dialog(
+                              backgroundColor: Colors.black,
+                              insetPadding: EdgeInsets.zero,
+                              child: Stack(
+                                children: [
+                                  InteractiveViewer(
+                                    child: Image.network(
+                                      imgUrl,
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 8, right: 8,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close,
+                                          color: Colors.white, size: 30),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        } : null,
+                        child: Image.network(
+                          imgUrl,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.broken_image, size: 100),
+                        ),
                       ),
                       if (!isUnlocked)
                         Positioned.fill(
