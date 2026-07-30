@@ -1,5 +1,9 @@
+باشه، کل فایل `main.dart` رو اینطوری بنویس:
+
+```dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
 import 'dart:convert';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
@@ -36,7 +40,7 @@ class _CodeScreenState extends State<CodeScreen> {
 
   Future<void> _enter() async {
     setState(() => _loading = true);
-    final code = _controller.text.trim();
+    final code = _controller.text.trim().toUpperCase();
     try {
       final res = await http.get(
         Uri.parse('$baseUrl/api/playlists/$code/'),
@@ -106,19 +110,43 @@ class _CodeScreenState extends State<CodeScreen> {
   }
 }
 
-class PlaylistScreen extends StatelessWidget {
+class PlaylistScreen extends StatefulWidget {
   final Map data;
   const PlaylistScreen({super.key, required this.data});
 
   @override
+  State<PlaylistScreen> createState() => _PlaylistScreenState();
+}
+
+class _PlaylistScreenState extends State<PlaylistScreen> {
+  final AudioPlayer _player = AudioPlayer();
+  String? _playingUrl;
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlay(String url) async {
+    if (_playingUrl == url) {
+      await _player.stop();
+      setState(() => _playingUrl = null);
+    } else {
+      await _player.play(UrlSource(url));
+      setState(() => _playingUrl = url);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final photos = data['photos'] as List? ?? [];
-    final songs = data['songs'] as List? ?? [];
-    final dialog = data['dialog'] ?? '';
+    final photos = widget.data['photos'] as List? ?? [];
+    final songs = widget.data['songs'] as List? ?? [];
+    final dialog = widget.data['dialog'] ?? '';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(data['title'] ?? ''),
+        title: Text(widget.data['title'] ?? ''),
         backgroundColor: Colors.pink,
         foregroundColor: Colors.white,
       ),
@@ -126,7 +154,6 @@ class PlaylistScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // بخش عکس‌ها
             if (photos.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.all(12),
@@ -142,7 +169,7 @@ class PlaylistScreen extends StatelessWidget {
                       child: Image.network(
                         '$baseUrl${photo['image']}',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => 
+                        errorBuilder: (_, __, ___) =>
                           const Icon(Icons.broken_image, size: 100),
                       ),
                     ),
@@ -156,20 +183,27 @@ class PlaylistScreen extends StatelessWidget {
               )),
             ],
 
-            // بخش موزیک‌ها
             if (songs.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text('🎵 موزیک‌ها',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink)),
               ),
-              ...songs.map((song) => ListTile(
-                leading: const Icon(Icons.music_note, color: Colors.pink),
-                title: Text(song['title']),
-              )),
+              ...songs.map((song) {
+                final url = '$baseUrl${song['file']}';
+                final isPlaying = _playingUrl == url;
+                return ListTile(
+                  leading: Icon(
+                    isPlaying ? Icons.pause_circle : Icons.play_circle,
+                    color: Colors.pink,
+                    size: 40,
+                  ),
+                  title: Text(song['title']),
+                  onTap: () => _togglePlay(url),
+                );
+              }),
             ],
 
-            // بخش دیالوگ
             if (dialog != '') ...[
               const Padding(
                 padding: EdgeInsets.all(12),
