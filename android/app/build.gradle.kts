@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.loveapp_android"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
