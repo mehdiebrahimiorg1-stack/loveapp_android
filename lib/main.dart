@@ -36,7 +36,7 @@ class _CodeScreenState extends State<CodeScreen> {
 
   Future<void> _enter() async {
     setState(() => _loading = true);
-    final code = _controller.text.trim().toUpperCase();
+    final code = _controller.text.trim();
     try {
       final res = await http.get(
         Uri.parse('$baseUrl/api/playlists/$code/'),
@@ -79,6 +79,7 @@ class _CodeScreenState extends State<CodeScreen> {
               TextField(
                 controller: _controller,
                 textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -93,6 +94,7 @@ class _CodeScreenState extends State<CodeScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.pink,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
                   ),
                   child: const Text('ورود'),
                 ),
@@ -110,34 +112,83 @@ class PlaylistScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final messages = data['messages'] as List;
+    final photos = data['photos'] as List? ?? [];
+    final songs = data['songs'] as List? ?? [];
+    final dialog = data['dialog'] ?? '';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(data['title'] ?? ''),
         backgroundColor: Colors.pink,
         foregroundColor: Colors.white,
       ),
-      body: ListView.builder(
-        itemCount: messages.length,
-        itemBuilder: (_, i) {
-          final msg = messages[i];
-          return Card(
-            margin: const EdgeInsets.all(8),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (msg['song_title'] != '')
-                    Text('🎵 ${msg['song_title']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  if (msg['text'] != '')
-                    Text(msg['text']),
-                ],
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // بخش عکس‌ها
+            if (photos.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('📸 عکس‌ها',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink)),
               ),
-            ),
-          );
-        },
+              ...photos.map((photo) => Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Column(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        '$baseUrl${photo['image']}',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => 
+                          const Icon(Icons.broken_image, size: 100),
+                      ),
+                    ),
+                    if (photo['caption'] != '')
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(photo['caption']),
+                      ),
+                  ],
+                ),
+              )),
+            ],
+
+            // بخش موزیک‌ها
+            if (songs.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('🎵 موزیک‌ها',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink)),
+              ),
+              ...songs.map((song) => ListTile(
+                leading: const Icon(Icons.music_note, color: Colors.pink),
+                title: Text(song['title']),
+              )),
+            ],
+
+            // بخش دیالوگ
+            if (dialog != '') ...[
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('💬 پیام',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.pink)),
+              ),
+              Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.pink[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.pink),
+                ),
+                child: Text(dialog, style: const TextStyle(fontSize: 16)),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
