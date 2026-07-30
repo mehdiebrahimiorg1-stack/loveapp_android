@@ -396,8 +396,10 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('ساخت پلی‌لیست ❤️', fontSize: 18),
-                    style: TextStyle(fontSize: 18)),
+                  child: const Text(
+                    'ساخت پلی‌لیست ❤️',
+                    style: TextStyle(fontSize: 18),
+                  ),
                 ),
             ],
           ],
