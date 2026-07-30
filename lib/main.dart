@@ -16,10 +16,10 @@ class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     return super.createHttpClient(context)
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
   }
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -70,7 +70,7 @@ class _CodeScreenState extends State<CodeScreen> {
   }
 
   void _snack(String msg) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   @override
   Widget build(BuildContext context) {
@@ -85,35 +85,37 @@ class _CodeScreenState extends State<CodeScreen> {
               const Icon(Icons.favorite, size: 80, color: Colors.pink),
               const SizedBox(height: 20),
               const Text('کد خود را وارد کنید',
-                style: TextStyle(fontSize: 20, color: Colors.pink)),
+                  style: TextStyle(fontSize: 20, color: Colors.pink)),
               const SizedBox(height: 20),
               TextField(
                 controller: _controller,
                 textAlign: TextAlign.center,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   hintText: 'XXXXXX',
                 ),
               ),
               const SizedBox(height: 20),
               _loading
-                ? const CircularProgressIndicator(color: Colors.pink)
-                : ElevatedButton(
-                  onPressed: _enter,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.pink,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                  child: const Text('ورود'),
-                ),
+                  ? const CircularProgressIndicator(color: Colors.pink)
+                  : ElevatedButton(
+                      onPressed: _enter,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.pink,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      child: const Text('ورود'),
+                    ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const CreatePlaylistScreen())),
+                    MaterialPageRoute(
+                        builder: (_) => const CreatePlaylistScreen())),
                 child: const Text('+ ساخت پلی‌لیست جدید',
-                  style: TextStyle(color: Colors.pink, fontSize: 16)),
+                    style: TextStyle(color: Colors.pink, fontSize: 16)),
               ),
             ],
           ),
@@ -124,7 +126,7 @@ class _CodeScreenState extends State<CodeScreen> {
 }
 
 // ─────────────────────────────────────────────
-// صفحه ساخت پلی‌لیست (اصلاح‌شده)
+// صفحه ساخت پلی‌لیست
 // ─────────────────────────────────────────────
 class CreatePlaylistScreen extends StatefulWidget {
   const CreatePlaylistScreen({super.key});
@@ -135,43 +137,44 @@ class CreatePlaylistScreen extends StatefulWidget {
 class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
   final _titleController = TextEditingController();
   final _dialogController = TextEditingController();
-  final _songTitleController = TextEditingController();
   bool _loading = false;
   String? _code;
   List<XFile> _images = [];
-  List<XFile> _song = []
+  List<XFile> _songs = [];
   final _picker = ImagePicker();
   String _status = '';
 
   void _snack(String msg) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Future<void> _pickImages() async {
-    // درخواست مجوز و انتخاب چند عکس
     final picked = await _picker.pickMultiImage();
     if (picked.isNotEmpty) {
-      setState(() => _images = picked);
+      setState(() => _images.addAll(picked));
     }
   }
 
   Future<void> _pickSong() async {
-  final picked = await _picker.pickMedia();
-  if (picked != null) {
-    final ext = picked.path.split('.').last.toLowerCase();
-    if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
-      setState(() => _songs.add(picked));
-    } else {
-      _snack('لطفاً یه فایل موزیک انتخاب کن');
+    final picked = await _picker.pickMedia();
+    if (picked != null) {
+      final ext = picked.path.split('.').last.toLowerCase();
+      if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
+        setState(() => _songs.add(picked));
+      } else {
+        _snack('لطفاً یه فایل موزیک انتخاب کن (mp3, wav, ...)');
+      }
     }
   }
-}
 
   Future<void> _create() async {
     if (_titleController.text.isEmpty) {
       _snack('عنوان رو بنویس!');
       return;
     }
-    setState(() { _loading = true; _status = 'در حال ساخت پلی‌لیست...'; });
+    setState(() {
+      _loading = true;
+      _status = 'در حال ساخت پلی‌لیست...';
+    });
 
     try {
       // مرحله ۱: ساخت پلی‌لیست
@@ -201,32 +204,32 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
           Uri.parse('$baseUrl/api/playlists/$code/add-photo/'),
         );
         request.files.add(
-          await http.MultipartFile.fromPath('image', _images[i].path)
-        );
-        // caption خالی هم ارسال میکنیم
+            await http.MultipartFile.fromPath('image', _images[i].path));
         request.fields['caption'] = '';
-        final response = await request.send().timeout(const Duration(seconds: 30));
+        final response =
+            await request.send().timeout(const Duration(seconds: 30));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
           _snack('خطا در آپلود عکس ${i + 1}: $body');
         }
       }
 
-      // مرحله ۳: آپلود موزیک
+      // مرحله ۳: آپلود موزیک‌ها
       for (int i = 0; i < _songs.length; i++) {
-        setState(() => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
+        setState(
+            () => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('$baseUrl/api/playlists/$code/add-song/'),
         );
         request.files.add(
-          await http.MultipartFile.fromPath('file', _songs[i].path)
-        );
+            await http.MultipartFile.fromPath('file', _songs[i].path));
         request.fields['title'] = _songs[i].path.split('/').last;
-        final response = await request.send().timeout(const Duration(seconds: 60));
+        final response =
+            await request.send().timeout(const Duration(seconds: 60));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
-          _snack('خطا در آپلود موزیک: $body');
+          _snack('خطا در آپلود موزیک ${i + 1}: $body');
         }
       }
 
@@ -235,9 +238,11 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         _code = code;
         _status = '';
       });
-
     } catch (e) {
-      setState(() { _loading = false; _status = ''; });
+      setState(() {
+        _loading = false;
+        _status = '';
+      });
       _snack('خطا: $e');
     }
   }
@@ -256,7 +261,6 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_code != null) ...[
-              // نمایش کد موفق
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -266,35 +270,36 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 50),
+                    const Icon(Icons.check_circle,
+                        color: Colors.green, size: 50),
                     const SizedBox(height: 12),
                     const Text('پلی‌لیست ساخته شد! 🎉',
-                      style: TextStyle(fontSize: 18, color: Colors.pink)),
+                        style: TextStyle(fontSize: 18, color: Colors.pink)),
                     const SizedBox(height: 12),
                     const Text('کد پلی‌لیست:',
-                      style: TextStyle(color: Colors.grey)),
+                        style: TextStyle(color: Colors.grey)),
                     const SizedBox(height: 8),
                     Text(_code!,
-                      style: const TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pink,
-                        letterSpacing: 8,
-                      )),
+                        style: const TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.pink,
+                          letterSpacing: 8,
+                        )),
                     const SizedBox(height: 8),
                     const Text('این کد رو به طرف مقابل بده ❤️',
-                      style: TextStyle(color: Colors.grey)),
+                        style: TextStyle(color: Colors.grey)),
                   ],
                 ),
               ),
             ] else ...[
-              // فرم ساخت پلی‌لیست
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
                   labelText: 'عنوان پلی‌لیست',
                   prefixIcon: const Icon(Icons.title, color: Colors.pink),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -303,20 +308,23 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 maxLines: 4,
                 decoration: InputDecoration(
                   labelText: 'پیام عاشقانه 💬',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // بخش عکس
-              const Text('📸 عکس‌ها', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              // ── بخش عکس ──
+              const Text('📸 عکس‌ها',
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pickImages,
                 icon: const Icon(Icons.photo_library, color: Colors.pink),
                 label: Text(_images.isEmpty
-                  ? 'انتخاب عکس از گالری'
-                  : '${_images.length} عکس انتخاب شده'),
+                    ? 'اضافه کردن عکس'
+                    : '${_images.length} عکس انتخاب شده - اضافه کردن بیشتر'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.pink,
                   side: const BorderSide(color: Colors.pink),
@@ -326,7 +334,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               if (_images.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 100,
+                  height: 110,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _images.length,
@@ -335,16 +343,19 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                         Padding(
                           padding: const EdgeInsets.all(4),
                           child: Image.file(File(_images[i].path),
-                            height: 100, width: 100, fit: BoxFit.cover),
+                              height: 100, width: 100, fit: BoxFit.cover),
                         ),
                         Positioned(
-                          top: 0, right: 0,
+                          top: 0,
+                          right: 0,
                           child: GestureDetector(
-                            onTap: () => setState(() => _images.removeAt(i)),
+                            onTap: () =>
+                                setState(() => _images.removeAt(i)),
                             child: const CircleAvatar(
                               radius: 12,
                               backgroundColor: Colors.red,
-                              child: Icon(Icons.close, size: 14, color: Colors.white),
+                              child: Icon(Icons.close,
+                                  size: 14, color: Colors.white),
                             ),
                           ),
                         ),
@@ -356,8 +367,10 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
 
               const SizedBox(height: 16),
 
-              // بخش موزیک
-              const Text(':musical_note: موزیک', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              // ── بخش موزیک ──
+              const Text('🎵 موزیک‌ها',
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pickSong,
@@ -372,25 +385,29 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               if (_songs.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ..._songs.asMap().entries.map((entry) => ListTile(
-                  leading: const Icon(Icons.music_note, color: Colors.pink),
-                  title: Text(entry.value.path.split('/').last,
-                    overflow: TextOverflow.ellipsis),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: () => setState(() => _songs.removeAt(entry.key)),
-                  ),
-                )),
+                      leading:
+                          const Icon(Icons.music_note, color: Colors.pink),
+                      title: Text(
+                        entry.value.path.split('/').last,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () =>
+                            setState(() => _songs.removeAt(entry.key)),
+                      ),
+                    )),
               ],
 
               const SizedBox(height: 24),
 
-              // وضعیت آپلود
               if (_loading) ...[
-                const CircularProgressIndicator(color: Colors.pink),
+                const Center(
+                    child: CircularProgressIndicator(color: Colors.pink)),
                 const SizedBox(height: 8),
                 Text(_status,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.pink)),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.pink)),
               ] else
                 ElevatedButton(
                   onPressed: _create,
@@ -399,7 +416,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 55),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text(
                     'ساخت پلی‌لیست ❤️',
@@ -415,7 +432,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
 }
 
 // ─────────────────────────────────────────────
-// صفحه نمایش پلی‌لیست (با عکس مات)
+// صفحه نمایش پلی‌لیست
 // ─────────────────────────────────────────────
 class PlaylistScreen extends StatefulWidget {
   final Map data;
@@ -446,14 +463,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  void _unlockPhoto(int index) {
-    setState(() => _unlockedPhotos.add(index));
-  }
-
-  void _unlockSongs() {
-    setState(() => _songsUnlocked = true);
-  }
-
   @override
   Widget build(BuildContext context) {
     final photos = widget.data['photos'] as List? ?? [];
@@ -471,13 +480,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            // ── عکس‌ها با blur ──
+            // ── عکس‌ها ──
             if (photos.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text('📸 عکس‌ها',
-                  style: TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.bold, color: Colors.pink)),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink)),
               ),
               ...photos.asMap().entries.map((entry) {
                 final i = entry.key;
@@ -486,38 +497,40 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 final imgUrl = '$baseUrl${photo['image']}';
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   clipBehavior: Clip.hardEdge,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12)),
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // عکس اصلی
                       Image.network(
                         imgUrl,
                         width: double.infinity,
                         height: 250,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.broken_image, size: 100),
+                            const Icon(Icons.broken_image, size: 100),
                       ),
-                      // لایه blur اگه قفله
                       if (!isUnlocked)
                         Positioned.fill(
                           child: GestureDetector(
-                            onTap: () => _unlockPhoto(i),
+                            onTap: () => setState(
+                                () => _unlockedPhotos.add(i)),
                             child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                              ),
+                              color: Colors.black.withOpacity(0.65),
                               child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.lock, color: Colors.white, size: 40),
+                                  Icon(Icons.lock,
+                                      color: Colors.white, size: 40),
                                   SizedBox(height: 8),
                                   Text('برای دیدن عکس ضربه بزنید',
-                                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16)),
                                 ],
                               ),
                             ),
@@ -534,16 +547,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text('🎵 موزیک‌ها',
-                  style: TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.bold, color: Colors.pink)),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink)),
               ),
               if (!_songsUnlocked)
                 Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   child: ListTile(
-                    leading: const Icon(Icons.lock, color: Colors.pink, size: 40),
+                    leading:
+                        const Icon(Icons.lock, color: Colors.pink, size: 40),
                     title: const Text('برای گوش دادن ضربه بزنید'),
-                    onTap: _unlockSongs,
+                    onTap: () => setState(() => _songsUnlocked = true),
                   ),
                 )
               else
@@ -552,8 +569,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   final isPlaying = _playingUrl == url;
                   return ListTile(
                     leading: Icon(
-                      isPlaying ? Icons.pause_circle : Icons.play_circle,
-                      color: Colors.pink, size: 40,
+                      isPlaying
+                          ? Icons.pause_circle
+                          : Icons.play_circle,
+                      color: Colors.pink,
+                      size: 40,
                     ),
                     title: Text(song['title']),
                     onTap: () => _togglePlay(url),
@@ -566,8 +586,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               const Padding(
                 padding: EdgeInsets.all(12),
                 child: Text('💬 پیام',
-                  style: TextStyle(fontSize: 18,
-                    fontWeight: FontWeight.bold, color: Colors.pink)),
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink)),
               ),
               Container(
                 margin: const EdgeInsets.all(12),
@@ -577,7 +599,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.pink),
                 ),
-                child: Text(dialog, style: const TextStyle(fontSize: 16)),
+                child: Text(dialog,
+                    style: const TextStyle(fontSize: 16)),
               ),
             ],
 
