@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
+import 'dart:io';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
@@ -99,8 +101,181 @@ class _CodeScreenState extends State<CodeScreen> {
                   ),
                   child: const Text('ورود'),
                 ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const CreatePlaylistScreen(),
+                  ));
+                },
+                child: const Text('+ ساخت پلی‌لیست جدید',
+                  style: TextStyle(color: Colors.pink, fontSize: 16)),
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class CreatePlaylistScreen extends StatefulWidget {
+  const CreatePlaylistScreen({super.key});
+
+  @override
+  State<CreatePlaylistScreen> createState() => _CreatePlaylistScreenState();
+}
+
+class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
+  final _titleController = TextEditingController();
+  final _dialogController = TextEditingController();
+  bool _loading = false;
+  String? _code;
+  List<XFile> _images = [];
+  final _picker = ImagePicker();
+
+  Future<void> _pickImage() async {
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() => _images.add(picked));
+    }
+  }
+
+  Future<void> _create() async {
+    if (_titleController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('عنوان رو بنویس!')),
+      );
+      return;
+    }
+    setState(() => _loading = true);
+
+    // ساخت پلی‌لیست
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/playlists/create/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'title': _titleController.text,
+        'dialog': _dialogController.text,
+      }),
+    );
+
+    if (res.statusCode == 201) {
+      final data = jsonDecode(res.body);
+      final code = data['code'];
+
+      // آپلود عکس‌ها
+      for (final image in _images) {
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/api/playlists/$code/add-photo/'),
+        );
+        request.files.add(await http.MultipartFile.fromPath('image', image.path));
+        await request.send();
+      }
+
+      setState(() {
+        _loading = false;
+        _code = code;
+      });
+    } else {
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('خطا در ساخت پلی‌لیست!')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ساخت پلی‌لیست'),
+        backgroundColor: Colors.pink,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            if (_code != null) ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.pink[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.pink),
+                ),
+                child: Column(
+                  children: [
+                    const Text('کد پلی‌لیست شما:',
+                      style: TextStyle(fontSize: 16, color: Colors.pink)),
+                    const SizedBox(height: 8),
+                    Text(_code!,
+                      style: const TextStyle(fontSize: 32,
+                        fontWeight: FontWeight.bold, color: Colors.pink)),
+                    const SizedBox(height: 8),
+                    const Text('این کد رو به طرف مقابل بده',
+                      style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ] else ...[
+              TextField(
+                controller: _titleController,
+                decoration: InputDecoration(
+                  labelText: 'عنوان پلی‌لیست',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _dialogController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'پیام عاشقانه',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo),
+                label: const Text('اضافه کردن عکس'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pink,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_images.isNotEmpty)
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _images.length,
+                    itemBuilder: (_, i) => Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Image.file(File(_images[i].path), height: 100),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              _loading
+                ? const CircularProgressIndicator(color: Colors.pink)
+                : ElevatedButton(
+                  onPressed: _create,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  child: const Text('ساخت پلی‌لیست'),
+                ),
+            ],
+          ],
         ),
       ),
     );
