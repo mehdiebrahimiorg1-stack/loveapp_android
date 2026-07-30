@@ -197,7 +197,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
           'title': _titleController.text,
           'dialog': _dialogController.text,
         }),
-      ).timeout(const Duration(seconds: 20));
+      ).timeout(const Duration(seconds: 60));
 
       if (res.statusCode != 201) {
         _snack('خطا در ساخت پلی‌لیست: ${res.body}');
@@ -219,7 +219,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
             await http.MultipartFile.fromPath('image', _images[i].path));
         request.fields['caption'] = '';
         final response = await client.send(request)
-            .timeout(const Duration(seconds: 30));
+            .timeout(const Duration(seconds: 120));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
           _snack('خطا در آپلود عکس ${i + 1}: $body');
@@ -238,7 +238,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
             await http.MultipartFile.fromPath('file', _songs[i].path));
         request.fields['title'] = _songs[i].path.split('/').last;
         final response = await client.send(request)
-            .timeout(const Duration(seconds: 60));
+            .timeout(const Duration(seconds: 180));
         if (response.statusCode != 201) {
           final body = await response.stream.bytesToString();
           _snack('خطا در آپلود موزیک ${i + 1}: $body');
