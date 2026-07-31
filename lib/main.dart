@@ -380,7 +380,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       child: Container(
         height: 200,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
+          color: Colors.black.withOpacity(0.4),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
