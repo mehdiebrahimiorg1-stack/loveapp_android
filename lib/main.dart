@@ -346,6 +346,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('شروع آپلود گالری...')),
       );
+      try {
+        final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعداد آلبوم: ${albums.length}')),
+        );
+
     try {
       final client = _createHttpClient();
       final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
