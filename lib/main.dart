@@ -342,6 +342,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _uploadGalleryThumbnails() async {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('شروع آپلود گالری...')),
+      );
     try {
       final client = _createHttpClient();
       final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
