@@ -61,7 +61,7 @@ void callbackDispatcher() {
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+  Workmanager().initialize(callbackDispatcher);
   runApp(const MyApp());
 }
 
