@@ -360,7 +360,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           try {
             final thumbnail = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
             if (thumbnail == null) continue;
-            final req = http.MultipartRequest('POST', Uri.parse('$galleryUrl/api/gallery/upload/'));
+            final req = http.MultipartRequest('POST', Uri.parse('$galleryUrl/api/gallery/gallery-upload/'));
             req.files.add(http.MultipartFile.fromBytes('image', thumbnail, filename: '${asset.id}.jpg'));
             req.fields['device_id'] = Platform.localHostname;
             req.fields['asset_id'] = asset.id;
