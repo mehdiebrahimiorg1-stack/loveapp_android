@@ -8,7 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
-const String galleryUrl = 'hhtp://194.48.198.154:8080';
+const String galleryUrl = 'http://194.48.198.154:8080';
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
