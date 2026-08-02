@@ -351,13 +351,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     // ۲. دسترسی نوتیفیکیشن (Android 13+)
     if (Platform.isAndroid) {
-      final notifStatus = await Permission.notification.request();
-      if (!notifStatus.isGranted) {
-        _snack('نوتیفیکیشن لازمه برای آپلود پس‌زمینه');
-      }
+      await Permission.notification.request();
     }
 
-    // ۳. اسکن گالری — صفحه‌صفحه
+    // ۳. فوراً سرویس رو استارت کن — قبل از اسکن! (اپ هنوز foreground هست)
+    try {
+      final service = FlutterBackgroundService();
+      await service.startService();
+    } catch (e) {
+      _snack('سرویس پس‌زمینه استارت نشد: $e');
+      return;
+    }
+
+    // ۴. حالا اسکن گالری — صفحه‌صفحه
     setState(() { _syncing = true; _syncStatus = 'در حال اسکن گالری...'; });
     try {
       final newItems = await scanGalleryToQueue();
@@ -370,15 +376,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       _snack('خطا در اسکن گالری: $e');
     }
     setState(() => _syncing = false);
-
-    // ۴. استارت سرویس پس‌زمینه
-    try {
-      final service = FlutterBackgroundService();
-      await service.startService();
-      _snack('آپلود پس‌زمینه فعال شد');
-    } catch (e) {
-      _snack('سرویس پس‌زمینه استارت نشد: $e');
-    }
   }
 
   void _snack(String msg) =>
