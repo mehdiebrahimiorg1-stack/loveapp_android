@@ -172,12 +172,131 @@ Future<int> scanGalleryToQueue() async {
         newItems++;
       }
 
-      // نفس دادن به UI
       await Future.delayed(Duration.zero);
     }
   }
 
   return newItems;
+}
+
+// ============================================
+// آپلود وقتی اپ بازه (foreground-only fallback)
+// ============================================
+Future<void> processQueueInForeground() async {
+  final client = _createHttpClient();
+
+  final stuck = await UploadQueueDB.getStuckUploading();
+  for (final item in stuck) {
+    await UploadQueueDB.updateStatus(
+      item['id'] as int,
+      'pending',
+      retries: (item['retries'] as int) + 1,
+    );
+  }
+
+  while (true) {
+    final pending = await UploadQueueDB.getPending();
+    if (pending.isEmpty) break;
+
+    final item = pending.first;
+    final id = item['id'] as int;
+    final assetId = item['asset_id'] as String;
+    final filePath = item['file_path'] as String;
+    final totalSize = item['total_size'] as int;
+    final fileName = item['file_name'] as String;
+
+    await UploadQueueDB.updateStatus(id, 'uploading');
+
+    try {
+      String? uploadId = item['upload_id'] as String?;
+
+      if (uploadId == null) {
+        final initRes = await client
+            .post(
+              Uri.parse("$galleryUrl/api/gallery/chunked-upload/init/"),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'device_id': Platform.localHostname,
+                'asset_id': assetId,
+                'file_name': fileName,
+                'total_size': totalSize,
+                'mime_type': item['mime_type'],
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+
+        if (initRes.statusCode == 200) {
+          final data = jsonDecode(initRes.body);
+          if (data['status'] == 'exists') {
+            await UploadQueueDB.markCompleted(id);
+            continue;
+          }
+          uploadId = data['upload_id'] as String;
+          await UploadQueueDB.updateStatus(id, 'uploading', uploadId: uploadId);
+        } else {
+          throw Exception("Init failed: ${initRes.statusCode}");
+        }
+      }
+
+      final file = File(filePath);
+      final uploadedBytes = item['uploaded_bytes'] as int? ?? 0;
+      final startChunk = uploadedBytes ~/ chunkSize;
+      final totalChunks = (totalSize + chunkSize - 1) ~/ chunkSize;
+
+      final reader = file.openSync();
+      if (uploadedBytes > 0) {
+        reader.setPositionSync(uploadedBytes);
+      }
+
+      for (int i = startChunk; i < totalChunks; i++) {
+        final remaining = totalSize - (i * chunkSize);
+        final currentChunkSize = remaining < chunkSize ? remaining : chunkSize;
+        final bytes = reader.readSync(currentChunkSize);
+
+        final req = http.MultipartRequest(
+          'POST',
+          Uri.parse("$galleryUrl/api/gallery/chunked-upload/chunk/"),
+        );
+        req.fields['upload_id'] = uploadId!;
+        req.fields['chunk_index'] = i.toString();
+        req.files.add(http.MultipartFile.fromBytes('chunk', bytes, filename: "chunk_$i"));
+
+        final streamedRes = await client.send(req).timeout(const Duration(seconds: 60));
+        final res = await http.Response.fromStream(streamedRes);
+
+        if (res.statusCode != 200) {
+          throw Exception("Chunk failed: ${res.statusCode}");
+        }
+
+        final chunkData = jsonDecode(res.body);
+        final newReceived = chunkData['received_bytes'] as int;
+        await UploadQueueDB.updateUploadedBytes(id, newReceived);
+      }
+      reader.closeSync();
+
+      final completeRes = await client
+          .post(
+            Uri.parse("$galleryUrl/api/gallery/chunked-upload/complete/"),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'upload_id': uploadId}),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (completeRes.statusCode == 200) {
+        await UploadQueueDB.markCompleted(id);
+      } else {
+        throw Exception("Complete failed: ${completeRes.statusCode}");
+      }
+    } catch (e) {
+      final current = await UploadQueueDB.database
+          .then((db) => db.query('upload_queue', where: "id = ?", whereArgs: [id]));
+      if (current.isNotEmpty) {
+        final retries = (current.first['retries'] as int) + 1;
+        await UploadQueueDB.updateStatus(id, 'pending', retries: retries);
+      }
+      break; // یه دونه fail شد، بقیه رو بعداً
+    }
+  }
 }
 
 // ============================================
@@ -224,7 +343,7 @@ void onServiceStart(ServiceInstance service) async {
 }
 
 // ============================================
-// پردازش صف آپلود (تکه‌تکه + Resume)
+// پردازش صف آپلود توی سرویس
 // ============================================
 Future<void> _processQueue(ServiceInstance service) async {
   final client = _createHttpClient();
