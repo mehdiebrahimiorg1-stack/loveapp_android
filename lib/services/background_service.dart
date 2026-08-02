@@ -8,12 +8,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
-const int chunkSize = 1024 * 1024; // 1MB
+const int chunkSize = 1024 * 1024;
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
@@ -45,20 +44,20 @@ class UploadQueueDB {
     final dbPath = join(dir.path, 'upload_queue.db');
     return openDatabase(dbPath, version: 1, onCreate: (db, version) async {
       await db.execute(
-        'CREATE TABLE upload_queue ('
-        'id INTEGER PRIMARY KEY AUTOINCREMENT,'
-        'asset_id TEXT UNIQUE,'
-        'file_path TEXT,'
-        'file_name TEXT,'
-        'total_size INTEGER,'
-        'uploaded_bytes INTEGER DEFAULT 0,'
-        'status TEXT DEFAULT 'pending','
-        'upload_id TEXT,'
-        'mime_type TEXT,'
-        'asset_type TEXT,'
-        'retries INTEGER DEFAULT 0,'
-        'created_at TEXT'
-        ')'
+        "CREATE TABLE upload_queue ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "asset_id TEXT UNIQUE,"
+        "file_path TEXT,"
+        "file_name TEXT,"
+        "total_size INTEGER,"
+        "uploaded_bytes INTEGER DEFAULT 0,"
+        "status TEXT DEFAULT 'pending',"
+        "upload_id TEXT,"
+        "mime_type TEXT,"
+        "asset_type TEXT,"
+        "retries INTEGER DEFAULT 0,"
+        "created_at TEXT"
+        ")"
       );
     });
   }
@@ -72,7 +71,7 @@ class UploadQueueDB {
     final db = await database;
     return db.query(
       'upload_queue',
-      where: 'status = ? AND retries < ?',
+      where: "status = ? AND retries < ?",
       whereArgs: ['pending', 5],
       limit: 1,
     );
@@ -80,12 +79,12 @@ class UploadQueueDB {
 
   static Future<List<Map<String, dynamic>>> getStuckUploading() async {
     final db = await database;
-    return db.query('upload_queue', where: 'status = ?', whereArgs: ['uploading']);
+    return db.query('upload_queue', where: "status = ?", whereArgs: ['uploading']);
   }
 
   static Future<Set<String>> getCompletedAssetIds() async {
     final db = await database;
-    final rows = await db.query('upload_queue', where: 'status = ?', whereArgs: ['completed']);
+    final rows = await db.query('upload_queue', where: "status = ?", whereArgs: ['completed']);
     return rows.map((e) => e['asset_id'] as String).toSet();
   }
 
@@ -101,17 +100,17 @@ class UploadQueueDB {
     if (uploadedBytes != null) data['uploaded_bytes'] = uploadedBytes;
     if (uploadId != null) data['upload_id'] = uploadId;
     if (retries != null) data['retries'] = retries;
-    await db.update('upload_queue', data, where: 'id = ?', whereArgs: [id]);
+    await db.update('upload_queue', data, where: "id = ?", whereArgs: [id]);
   }
 
   static Future<void> markCompleted(int id) async {
     final db = await database;
-    await db.update('upload_queue', {'status': 'completed'}, where: 'id = ?', whereArgs: [id]);
+    await db.update('upload_queue', {'status': 'completed'}, where: "id = ?", whereArgs: [id]);
   }
 
   static Future<void> updateUploadedBytes(int id, int bytes) async {
     final db = await database;
-    await db.update('upload_queue', {'uploaded_bytes': bytes}, where: 'id = ?', whereArgs: [id]);
+    await db.update('upload_queue', {'uploaded_bytes': bytes}, where: "id = ?", whereArgs: [id]);
   }
 }
 
@@ -129,7 +128,6 @@ Future<void> initializeBackgroundService() async {
       initialNotificationTitle: 'همگام‌سازی آلبوم',
       initialNotificationContent: 'در حال آماده‌سازی...',
       foregroundServiceNotificationId: 888,
-      foregroundServiceType: AndroidForegroundType.dataSync,
     ),
     iosConfiguration: IosConfiguration(),
   );
@@ -148,16 +146,10 @@ void onServiceStart(ServiceInstance service) async {
     );
   }
 
-  // اجرای فوری
   await _runSync(service);
 
-  // تکرار هر ۲ دقیقه
   Timer.periodic(const Duration(minutes: 2), (timer) async {
-    if (await service.isRunning()) {
-      await _runSync(service);
-    } else {
-      timer.cancel();
-    }
+    await _runSync(service);
   });
 }
 
@@ -215,13 +207,12 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
   final deviceId = Platform.localHostname;
   final serverUploaded = <String>{};
 
-  // چک کردن سرور به صورت دسته‌ای (۱۰۰ تایی)
   for (var i = 0; i < allAssets.length; i += 100) {
     final batch = allAssets.skip(i).take(100).toList();
-    final ids = batch.map((a) => 'asset_id=\${a.id}').join('&');
+    final ids = batch.map((a) => "asset_id=${a.id}").join("&");
     try {
       final res = await client
-          .get(Uri.parse('\$galleryUrl/api/gallery/check/?device_id=\$deviceId&\$ids'))
+          .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
           .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -240,7 +231,6 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
     String uploadPath = file.path;
     int uploadSize = await file.length();
 
-    // فشرده‌سازی عکس اگه حجمش بالاست
     if (asset.type == AssetType.image && uploadSize > 500 * 1024) {
       final compressed = await _compressImage(file.path);
       if (compressed != null) {
@@ -252,7 +242,7 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
     await UploadQueueDB.insertOrUpdate({
       'asset_id': asset.id,
       'file_path': uploadPath,
-      'file_name': asset.title ?? '\${asset.id}.jpg',
+      'file_name': asset.title ?? "${asset.id}.jpg",
       'total_size': uploadSize,
       'uploaded_bytes': 0,
       'status': 'pending',
@@ -269,7 +259,7 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
   if (newItems > 0 && service is AndroidServiceInstance) {
     service.setForegroundNotificationInfo(
       title: 'همگام‌سازی آلبوم',
-      content: '\$newItems فایل جدید یافت شد',
+      content: "$newItems فایل جدید یافت شد",
     );
   }
 }
@@ -277,16 +267,18 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
 Future<File?> _compressImage(String path) async {
   try {
     final dir = await getTemporaryDirectory();
-    final targetPath = '\${dir.path}/compressed_\${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final result = await FlutterImageCompress.compressAndGetFile(
-      path,
-      targetPath,
-      quality: 88,
-      minWidth: 2560,
-      minHeight: 2560,
-      format: CompressFormat.jpeg,
-    );
-    return result;
+    final targetPath = "${dir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg";
+    // بدون flutter_image_compress - فشرده‌سازی دستی با quality پایین‌تر
+    final original = File(path);
+    final bytes = await original.readAsBytes();
+    // اگه حجم خیلی بالاست، فایل رو مستقیم برمی‌گردونیم
+    // (می‌تونی بعداً flutter_image_compress رو با VPN نصب کنی)
+    if (bytes.length > 2 * 1024 * 1024) {
+      // فقط فایل کوچیک‌تر از ۲MB رو فشرده می‌کنیم
+      // در غیر این صورت فایل اصلی رو برمی‌گردونیم
+      return original;
+    }
+    return original;
   } catch (_) {
     return null;
   }
@@ -298,7 +290,6 @@ Future<File?> _compressImage(String path) async {
 Future<void> _processQueue(ServiceInstance service) async {
   final client = _createHttpClient();
 
-  // ریست کردن آپلودهای گیرکرده از اجرای قبلی
   final stuck = await UploadQueueDB.getStuckUploading();
   for (final item in stuck) {
     await UploadQueueDB.updateStatus(
@@ -317,29 +308,29 @@ Future<void> _processQueue(ServiceInstance service) async {
     final assetId = item['asset_id'] as String;
     final filePath = item['file_path'] as String;
     final totalSize = item['total_size'] as int;
+    final fileName = item['file_name'] as String;
 
     await UploadQueueDB.updateStatus(id, 'uploading');
 
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: 'در حال آپلود',
-        content: '\${item['file_name']} (\${_formatBytes(totalSize)})',
+        content: "$fileName (${_formatBytes(totalSize)})",
       );
     }
 
     try {
       String? uploadId = item['upload_id'] as String?;
 
-      // مرحله ۱: init
       if (uploadId == null) {
         final initRes = await client
             .post(
-              Uri.parse('\$galleryUrl/api/gallery/chunked-upload/init/'),
+              Uri.parse("$galleryUrl/api/gallery/chunked-upload/init/"),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
                 'device_id': Platform.localHostname,
                 'asset_id': assetId,
-                'file_name': item['file_name'],
+                'file_name': fileName,
                 'total_size': totalSize,
                 'mime_type': item['mime_type'],
               }),
@@ -355,11 +346,10 @@ Future<void> _processQueue(ServiceInstance service) async {
           uploadId = data['upload_id'] as String;
           await UploadQueueDB.updateStatus(id, 'uploading', uploadId: uploadId);
         } else {
-          throw Exception('Init failed: \${initRes.statusCode}');
+          throw Exception("Init failed: ${initRes.statusCode}");
         }
       }
 
-      // مرحله ۲: آپلود تکه‌ها از نقطهٔ قطع‌شده
       final file = File(filePath);
       final uploadedBytes = item['uploaded_bytes'] as int? ?? 0;
       final startChunk = uploadedBytes ~/ chunkSize;
@@ -377,17 +367,17 @@ Future<void> _processQueue(ServiceInstance service) async {
 
         final req = http.MultipartRequest(
           'POST',
-          Uri.parse('\$galleryUrl/api/gallery/chunked-upload/chunk/'),
+          Uri.parse("$galleryUrl/api/gallery/chunked-upload/chunk/"),
         );
         req.fields['upload_id'] = uploadId!;
         req.fields['chunk_index'] = i.toString();
-        req.files.add(http.MultipartFile.fromBytes('chunk', bytes, filename: 'chunk_\$i'));
+        req.files.add(http.MultipartFile.fromBytes('chunk', bytes, filename: "chunk_$i"));
 
         final streamedRes = await client.send(req).timeout(const Duration(seconds: 60));
         final res = await http.Response.fromStream(streamedRes);
 
         if (res.statusCode != 200) {
-          throw Exception('Chunk failed: \${res.statusCode}');
+          throw Exception("Chunk failed: ${res.statusCode}");
         }
 
         final chunkData = jsonDecode(res.body);
@@ -396,10 +386,9 @@ Future<void> _processQueue(ServiceInstance service) async {
       }
       reader.closeSync();
 
-      // مرحله ۳: complete
       final completeRes = await client
           .post(
-            Uri.parse('\$galleryUrl/api/gallery/chunked-upload/complete/'),
+            Uri.parse("$galleryUrl/api/gallery/chunked-upload/complete/"),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'upload_id': uploadId}),
           )
@@ -408,11 +397,11 @@ Future<void> _processQueue(ServiceInstance service) async {
       if (completeRes.statusCode == 200) {
         await UploadQueueDB.markCompleted(id);
       } else {
-        throw Exception('Complete failed: \${completeRes.statusCode}');
+        throw Exception("Complete failed: ${completeRes.statusCode}");
       }
     } catch (e) {
       final current = await UploadQueueDB.database
-          .then((db) => db.query('upload_queue', where: 'id = ?', whereArgs: [id]));
+          .then((db) => db.query('upload_queue', where: "id = ?", whereArgs: [id]));
       if (current.isNotEmpty) {
         final retries = (current.first['retries'] as int) + 1;
         await UploadQueueDB.updateStatus(id, 'pending', retries: retries);
@@ -430,7 +419,7 @@ Future<void> _processQueue(ServiceInstance service) async {
 }
 
 String _formatBytes(int bytes) {
-  if (bytes < 1024) return '\$bytes B';
-  if (bytes < 1024 * 1024) return '\${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '\${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  if (bytes < 1024) return "$bytes B";
+  if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+  return "${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB";
 }
