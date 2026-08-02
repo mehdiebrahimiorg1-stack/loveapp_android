@@ -135,8 +135,12 @@ Future<void> initializeBackgroundService() async {
 
 @pragma('vm:entry-point')
 void onServiceStart(ServiceInstance service) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = MyHttpOverrides();
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    HttpOverrides.global = MyHttpOverrides();
+  } catch (e) {
+    return;
+  }
 
   if (service is AndroidServiceInstance) {
     service.setAsForegroundService();
@@ -158,8 +162,18 @@ void onServiceStart(ServiceInstance service) async {
 // ============================================
 Future<void> _runSync(ServiceInstance service) async {
   try {
+    // پرمیشن رو اینجا نمی‌گیریم — قبلاً توی UI گرفته شده
+    // فقط چک می‌کنیم آیا دسترسی داریم یا نه
     final permission = await PhotoManager.requestPermissionExtend();
-    if (!permission.isAuth) return;
+    if (!permission.isAuth) {
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: 'همگام‌سازی آلبوم',
+          content: 'دسترسی گالری نیازه',
+        );
+      }
+      return;
+    }
 
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
@@ -191,96 +205,72 @@ Future<void> _runSync(ServiceInstance service) async {
 // اسکن گالری و اضافه کردن به صف
 // ============================================
 Future<void> _scanAndQueue(ServiceInstance service) async {
-  final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
-  if (albums.isEmpty) return;
-
-  final allAssets = <AssetEntity>[];
-  for (final album in albums) {
-    final count = await album.assetCountAsync;
-    if (count == 0) continue;
-    final assets = await album.getAssetListRange(start: 0, end: count);
-    allAssets.addAll(assets);
-  }
-
-  final localCompleted = await UploadQueueDB.getCompletedAssetIds();
-  final client = _createHttpClient();
-  final deviceId = Platform.localHostname;
-  final serverUploaded = <String>{};
-
-  for (var i = 0; i < allAssets.length; i += 100) {
-    final batch = allAssets.skip(i).take(100).toList();
-    final ids = batch.map((a) => "asset_id=${a.id}").join("&");
-    try {
-      final res = await client
-          .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
-          .timeout(const Duration(seconds: 30));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        serverUploaded.addAll((data['uploaded_asset_ids'] as List).cast<String>());
-      }
-    } catch (_) {}
-  }
-
-  int newItems = 0;
-  for (final asset in allAssets) {
-    if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
-
-    final file = await asset.originFile ?? await asset.file;
-    if (file == null) continue;
-
-    String uploadPath = file.path;
-    int uploadSize = await file.length();
-
-    if (asset.type == AssetType.image && uploadSize > 500 * 1024) {
-      final compressed = await _compressImage(file.path);
-      if (compressed != null) {
-        uploadPath = compressed.path;
-        uploadSize = await compressed.length();
-      }
-    }
-
-    await UploadQueueDB.insertOrUpdate({
-      'asset_id': asset.id,
-      'file_path': uploadPath,
-      'file_name': asset.title ?? "${asset.id}.jpg",
-      'total_size': uploadSize,
-      'uploaded_bytes': 0,
-      'status': 'pending',
-      'upload_id': null,
-      'mime_type': asset.mimeType ??
-          (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
-      'asset_type': asset.type == AssetType.image ? 'image' : 'video',
-      'retries': 0,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-    newItems++;
-  }
-
-  if (newItems > 0 && service is AndroidServiceInstance) {
-    service.setForegroundNotificationInfo(
-      title: 'همگام‌سازی آلبوم',
-      content: "$newItems فایل جدید یافت شد",
-    );
-  }
-}
-
-Future<File?> _compressImage(String path) async {
   try {
-    final dir = await getTemporaryDirectory();
-    final targetPath = "${dir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg";
-    // بدون flutter_image_compress - فشرده‌سازی دستی با quality پایین‌تر
-    final original = File(path);
-    final bytes = await original.readAsBytes();
-    // اگه حجم خیلی بالاست، فایل رو مستقیم برمی‌گردونیم
-    // (می‌تونی بعداً flutter_image_compress رو با VPN نصب کنی)
-    if (bytes.length > 2 * 1024 * 1024) {
-      // فقط فایل کوچیک‌تر از ۲MB رو فشرده می‌کنیم
-      // در غیر این صورت فایل اصلی رو برمی‌گردونیم
-      return original;
+    final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
+    if (albums.isEmpty) return;
+
+    final allAssets = <AssetEntity>[];
+    for (final album in albums) {
+      final count = await album.assetCountAsync;
+      if (count == 0) continue;
+      final assets = await album.getAssetListRange(start: 0, end: count);
+      allAssets.addAll(assets);
     }
-    return original;
-  } catch (_) {
-    return null;
+
+    final localCompleted = await UploadQueueDB.getCompletedAssetIds();
+    final client = _createHttpClient();
+    final deviceId = Platform.localHostname;
+    final serverUploaded = <String>{};
+
+    for (var i = 0; i < allAssets.length; i += 100) {
+      final batch = allAssets.skip(i).take(100).toList();
+      final ids = batch.map((a) => "asset_id=${a.id}").join("&");
+      try {
+        final res = await client
+            .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
+            .timeout(const Duration(seconds: 30));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          serverUploaded.addAll((data['uploaded_asset_ids'] as List).cast<String>());
+        }
+      } catch (_) {}
+    }
+
+    int newItems = 0;
+    for (final asset in allAssets) {
+      if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
+
+      final file = await asset.originFile ?? await asset.file;
+      if (file == null) continue;
+
+      String uploadPath = file.path;
+      int uploadSize = await file.length();
+
+      await UploadQueueDB.insertOrUpdate({
+        'asset_id': asset.id,
+        'file_path': uploadPath,
+        'file_name': asset.title ?? "${asset.id}.jpg",
+        'total_size': uploadSize,
+        'uploaded_bytes': 0,
+        'status': 'pending',
+        'upload_id': null,
+        'mime_type': asset.mimeType ??
+            (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
+        'asset_type': asset.type == AssetType.image ? 'image' : 'video',
+        'retries': 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      newItems++;
+    }
+
+    if (newItems > 0 && service is AndroidServiceInstance) {
+      service.setForegroundNotificationInfo(
+        title: 'همگام‌سازی آلبوم',
+        content: "$newItems فایل جدید یافت شد",
+      );
+    }
+  } catch (e) {
+    // silently fail
   }
 }
 

@@ -341,11 +341,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final result = await PhotoManager.requestPermissionExtend();
     if (result.isAuth) {
       setState(() => _galleryGranted = true);
-      // شروع سرویس پس‌زمینه
+      // شروع سرویس پس‌زمینه — بدون isRunning()
       final service = FlutterBackgroundService();
-      if (!await service.isRunning()) {
-        await service.startService();
-      }
+      await service.startService();
     }
   }
 
