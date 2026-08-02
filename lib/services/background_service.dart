@@ -162,19 +162,8 @@ void onServiceStart(ServiceInstance service) async {
 // ============================================
 Future<void> _runSync(ServiceInstance service) async {
   try {
-    // پرمیشن رو اینجا نمی‌گیریم — قبلاً توی UI گرفته شده
-    // فقط چک می‌کنیم آیا دسترسی داریم یا نه
-    final permission = await PhotoManager.requestPermissionExtend();
-    if (!permission.isAuth) {
-      if (service is AndroidServiceInstance) {
-        service.setForegroundNotificationInfo(
-          title: 'همگام‌سازی آلبوم',
-          content: 'دسترسی گالری نیازه',
-        );
-      }
-      return;
-    }
-
+    // اصلاً پرمیشن نمی‌گیریم — قبلاً توی UI گرفته شده
+    // فقط سعی می‌کنیم گالری رو بخونیم
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: 'همگام‌سازی آلبوم',
@@ -270,7 +259,7 @@ Future<void> _scanAndQueue(ServiceInstance service) async {
       );
     }
   } catch (e) {
-    // silently fail
+    // silently fail — احتمالاً پرمیشن نداریم
   }
 }
 
