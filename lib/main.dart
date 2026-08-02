@@ -8,7 +8,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'dart:io';
-
+import 'dart:acync';
 import 'services/background_service.dart';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
