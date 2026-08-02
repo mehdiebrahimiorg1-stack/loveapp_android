@@ -7,7 +7,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:permission_handler/permission_handler.dart';
 import 'services/background_service.dart';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
@@ -32,6 +32,9 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
+  if (Platform.isAndroid){
+    await Permission.notification.request();
+  }
   await initializeBackgroundService();
   runApp(const MyApp());
 }
