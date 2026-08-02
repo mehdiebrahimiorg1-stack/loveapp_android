@@ -323,6 +323,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   final AudioPlayer _player = AudioPlayer();
   String? _playingUrl;
   bool _galleryGranted = false;
+  bool _syncing = false;
 
   @override
   void dispose() { _player.dispose(); super.dispose(); }
@@ -341,9 +342,28 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final result = await PhotoManager.requestPermissionExtend();
     if (result.isAuth) {
       setState(() => _galleryGranted = true);
-      // شروع سرویس پس‌زمینه — بدون isRunning()
-      final service = FlutterBackgroundService();
-      await service.startService();
+
+      // اسکن گالری توی UI thread
+      setState(() => _syncing = true);
+      try {
+        final newItems = await scanGalleryToQueue();
+        if (newItems > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$newItems فایل جدید به صف اضافه شد')),
+          );
+        }
+      } catch (e) {
+        // ignore
+      }
+      setState(() => _syncing = false);
+
+      // استارت سرویس پس‌زمینه برای آپلود
+      try {
+        final service = FlutterBackgroundService();
+        await service.startService();
+      } catch (e) {
+        // اگه سرویس استارت نشد، مشکلی نیست — آپلود وقتی اپ بازه انجام می‌شه
+      }
     }
   }
 
@@ -378,8 +398,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final dialog = widget.data['dialog'] ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.data['title'] ?? ''),
-          backgroundColor: Colors.pink, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: Text(widget.data['title'] ?? ''),
+        backgroundColor: Colors.pink,
+        foregroundColor: Colors.white,
+        actions: [
+          if (_syncing)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(width: 20, height: 20, 
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
