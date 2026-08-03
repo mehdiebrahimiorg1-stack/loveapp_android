@@ -265,7 +265,7 @@ class _CodeScreenState extends State<CodeScreen> {
                     MaterialPageRoute(
                       builder: (_) => const CreatePlaylistScreen(),
                     ),
-                  ),.then((_) {
+                  ).then((_) {
                     _checkAndResumeUpload();
                   }),
                 },
