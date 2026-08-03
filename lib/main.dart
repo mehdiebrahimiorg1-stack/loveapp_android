@@ -5,7 +5,7 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:flutter_windowmanager/flutter_windowmanager.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -34,8 +34,9 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  // جلوگیری از اسکرین‌شات در کل اپ
-  await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+  // جلوگیری از اسکرین‌شات
+  const channel = MethodChannel('secure_screen');
+  try { await channel.invokeMethod('setSecure'); } catch (_) {}
   runApp(const MyApp());
 }
 
