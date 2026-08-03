@@ -267,7 +267,7 @@ class _CodeScreenState extends State<CodeScreen> {
                     ),
                   ).then((_) {
                     _checkAndResumeUpload();
-                  }),
+                  });
                 },
                 child: const Text(
                   '+ ساخت پلی‌لیست جدید',
