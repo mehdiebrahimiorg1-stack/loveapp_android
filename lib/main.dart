@@ -264,7 +264,9 @@ class _CodeScreenState extends State<CodeScreen> {
                   MaterialPageRoute(
                     builder: (_) => const CreatePlaylistScreen(),
                   ),
-                ),
+                ),.then((_) {
+                   _checkAndResumeUpload();
+                }),
                 child: const Text(
                   '+ ساخت پلی‌لیست جدید',
                   style: TextStyle(color: Colors.pink, fontSize: 16),
@@ -278,6 +280,15 @@ class _CodeScreenState extends State<CodeScreen> {
   }
 }
 
+Future<void> _checkAndResumeUpload() async {
+  final permission = await PhotoManager.requestPermissionExtend();
+  if (!permission.isAuth) return;
+  final pending = await UploadQueueDB.getPendingCount();
+  if (pending > 0) {
+    // یه PlaylistScreen موقت نمیسازیم — فقط upload loop رو اجرا می‌کنیم
+    processQueueInForeground();
+  }
+}
 // ============================================
 // صفحه ساخت پلی‌لیست
 // ============================================
@@ -757,20 +768,39 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _resumeUploadIfGranted() async {
-    final permission = await PhotoManager.requestPermissionExtend();
-    if (!permission.isAuth) return;
-    setState(() => _galleryGranted = true);
+  final permission = await PhotoManager.requestPermissionExtend();
+  if (!permission.isAuth) return;
 
-    final pendingCount = await UploadQueueDB.getPendingCount();
-    if (pendingCount > 0) _startUploadLoop();
+  setState(() => _galleryGranted = true);
 
-    _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      try {
-        final newItems = await scanGalleryToQueue();
-        if (newItems > 0 && mounted) _startUploadLoop();
-      } catch (_) {}
-    });
+  // بلافاصله scan کن
+  setState(() {
+    _isSyncing = true;
+    _syncMessage = 'در حال اسکن گالری...';
+  });
+
+  try {
+    final newItems = await scanGalleryToQueue();
+    if (mounted) {
+      setState(() {
+        _syncTotal = newItems;
+        _syncMessage = newItems > 0
+            ? 'همگام‌سازی شروع شد — $newItems فایل'
+            : 'گالری همگام است ✓';
+      });
+    }
+    if (newItems > 0) _startUploadLoop();
+  } catch (_) {
+    if (mounted) setState(() { _isSyncing = false; _syncMessage = ''; });
   }
+
+  _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    try {
+      final newItems = await scanGalleryToQueue();
+      if (newItems > 0 && mounted) _startUploadLoop();
+    } catch (_) {}
+  });
+}
 
   void _startUploadLoop() {
     if (_isSyncing) return;
