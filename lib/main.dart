@@ -259,14 +259,16 @@ class _CodeScreenState extends State<CodeScreen> {
                     ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CreatePlaylistScreen(),
-                  ),
-                ),.then((_) {
-                   _checkAndResumeUpload();
-                }),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CreatePlaylistScreen(),
+                    ),
+                  ),.then((_) {
+                    _checkAndResumeUpload();
+                  }),
+                },
                 child: const Text(
                   '+ ساخت پلی‌لیست جدید',
                   style: TextStyle(color: Colors.pink, fontSize: 16),
