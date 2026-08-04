@@ -22,7 +22,7 @@ class UploadService {
 
     // اسکن گالری
     _statusController.add(const SyncStatus(
-      isRunning: true, uploaded: 0, total: 0, message: 'در حال اسکن گالری...',
+      isRunning: true, uploaded: 0, total: 0, message: 'تنها چیزی ک میمونه خاطراته',
     ));
 
     try {
@@ -37,7 +37,7 @@ class UploadService {
         } else {
           _statusController.add(SyncStatus(
             isRunning: false, uploaded: done, total: done,
-            message: 'گالری همگام است ✓',
+            message: ' برنامه آماده کار است✓',
           ));
         }
       }
@@ -68,7 +68,7 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: total,
-          message: 'همگام‌سازی: $done از $total',
+          message: 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
         ));
       },
     ).then((_) async {
@@ -76,7 +76,7 @@ class UploadService {
       final done = await UploadQueueDB.getCompletedCount();
       _statusController.add(SyncStatus(
         isRunning: false, uploaded: done, total: done,
-        message: 'همگام‌سازی کامل شد ✓',
+        message: 'اپلیکیشن آماده به کار...✓',
       ));
       // بعد از ۳ ثانیه پیام رو پاک کن
       await Future.delayed(const Duration(seconds: 3));
