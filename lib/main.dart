@@ -5,7 +5,7 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:file_picker/file_picker.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -322,15 +322,13 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
   }
 
   Future<void> _pickSong() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-      allowMultiple: true,
-    );
-    if (result != null) {
-      for (final f in result.files) {
-        if (f.path != null) {
-          setState(() => _songs.add(XFile(f.path!)));
-        }
+    final picked = await _picker.pickMedia();
+    if (picked != null) {
+      final ext = picked.path.split('.').last.toLowerCase();
+      if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
+        setState(() => _songs.add(picked));
+      } else {
+        _snack('لطفاً یه فایل موزیک انتخاب کن');
       }
     }
   }
