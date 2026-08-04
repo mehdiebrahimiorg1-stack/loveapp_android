@@ -281,7 +281,7 @@ class _CodeScreenState extends State<CodeScreen> {
     );
   }
 }
-
+bool _isGlobalUploading = false;
 Future<void> _checkAndResumeUpload() async {
   if (_isGlobalUploading) return;
   final permission = await PhotoManager.requestPermissionExtend();
