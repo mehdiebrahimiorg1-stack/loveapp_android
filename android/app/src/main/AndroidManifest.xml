@@ -11,7 +11,7 @@
         android:maxSdkVersion="32"/>
 
     <application
-        android:label="loveapp_android"
+        android:label="LoveHistory"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"

