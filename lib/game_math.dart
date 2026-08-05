@@ -22,45 +22,45 @@ class _Question {
 // ============================================
 final List<_Question> _allQuestions = [
   // لول ۱-۵ — جمع ساده
-  _Question(question: '1 + 1 = ?', options: ['1', '2', '3'], correctIndex: 1),
-  _Question(question: '2 + 1 = ?', options: ['2', '4', '3'], correctIndex: 2),
-  _Question(question: '3 + 2 = ?', options: ['5', '6', '4'], correctIndex: 0),
-  _Question(question: '4 + 3 = ?', options: ['6', '7', '8'], correctIndex: 1),
-  _Question(question: '5 + 4 = ?', options: ['8', '10', '9'], correctIndex: 2),
+  _Question(question: '1 - 2 = ?', options: ['1', '2', '3'], correctIndex: 0),
+  _Question(question: '3 + 1 = ?', options: ['5', '4', '3'], correctIndex: 1),
+  _Question(question: '2 + 3 - 1 = ?', options: ['5', '3', '4'], correctIndex: 2),
+  _Question(question: '5 - 2 + 1 = ?', options: ['3', '4', '5'], correctIndex: 1),
+  _Question(question: '4 + 2 - 3 = ?', options: ['2', '3', '4'], correctIndex: 1),
 
   // لول ۶-۱۰ — جمع متوسط
-  _Question(question: '8 + 7 = ?', options: ['14', '15', '16'], correctIndex: 1),
-  _Question(question: '12 + 9 = ?', options: ['20', '21', '22'], correctIndex: 1),
-  _Question(question: '15 + 16 = ?', options: ['30', '31', '32'], correctIndex: 1),
-  _Question(question: '23 + 18 = ?', options: ['39', '41', '40'], correctIndex: 1),
-  _Question(question: '47 + 35 = ?', options: ['81', '82', '83'], correctIndex: 1),
+  _Question(question: '6 - 1 + 2 = ?', options: ['6', '7', '8'], correctIndex: 1),
+  _Question(question: '3 + 4 - 2 = ?', options: ['4', '5', '6'], correctIndex: 1),
+  _Question(question: '7 - 3 - 7 = ?', options: ['4', '5', '6'], correctIndex: 1),
+  _Question(question: '5 + 3 - 4 = ?', options: ['3', '4', '5'], correctIndex: 1),
+  _Question(question: '2 x 3 + 1 = ?', options: ['6', '7', '8'], correctIndex: 1),
 
   // لول ۱۱-۱۵ — تفریق
-  _Question(question: '10 - 4 = ?', options: ['5', '6', '7'], correctIndex: 1),
-  _Question(question: '15 - 8 = ?', options: ['6', '8', '7'], correctIndex: 2),
-  _Question(question: '24 - 11 = ?', options: ['12', '13', '14'], correctIndex: 1),
-  _Question(question: '50 - 27 = ?', options: ['22', '23', '24'], correctIndex: 1),
-  _Question(question: '83 - 46 = ?', options: ['36', '37', '38'], correctIndex: 1),
+  _Question(question: '8 - 2 x 2 = ?', options: ['12', '13', '8'], correctIndex: 0),
+  _Question(question: '4 x 2 + 3 = ?', options: ['10', '11', '12'], correctIndex: 1),
+  _Question(question: '10 + 5 - 7 = ?', options: ['8', '7', '9'], correctIndex: 0),
+  _Question(question: '3 x 4 x 2 = ?', options: ['12', '24', '22'], correctIndex: 1),
+  _Question(question: '12 ÷ 3 + 3 = ?', options: ['7', '6', '8'], correctIndex: 0),
 
   // لول ۱۶-۲۰ — ضرب
-  _Question(question: '3 × 4 = ?', options: ['11', '12', '13'], correctIndex: 1),
-  _Question(question: '5 × 6 = ?', options: ['28', '30', '32'], correctIndex: 1),
-  _Question(question: '7 × 8 = ?', options: ['54', '56', '58'], correctIndex: 1),
-  _Question(question: '9 × 6 = ?', options: ['52', '54', '56'], correctIndex: 1),
-  _Question(question: '12 × 7 = ?', options: ['82', '84', '86'], correctIndex: 1),
+  _Question(question: '15 - 6 + 2 = ?', options: ['11', '12', '9'], correctIndex: 0),
+  _Question(question: '5 × 3 x 2 - 5 = ?', options: ['25', '26', '30'], correctIndex: 0),
+  _Question(question: '18 ÷ 3 x 3 = ?', options: ['18', '24', '9'], correctIndex: 0),
+  _Question(question: '9 × 6 + 1 = ?', options: ['52', '54', '55'], correctIndex: 1),
+  _Question(question: '12 + 17 - 1 + 4 = ?', options: ['32', '33', '31'], correctIndex: 0),
 
   // لول ۲۱-۲۵ — تقسیم
-  _Question(question: '20 ÷ 4 = ?', options: ['4', '5', '6'], correctIndex: 1),
-  _Question(question: '36 ÷ 6 = ?', options: ['5', '6', '7'], correctIndex: 1),
-  _Question(question: '48 ÷ 8 = ?', options: ['5', '7', '6'], correctIndex: 2),
-  _Question(question: '72 ÷ 9 = ?', options: ['7', '8', '9'], correctIndex: 1),
-  _Question(question: '84 ÷ 7 = ?', options: ['11', '12', '13'], correctIndex: 1),
+  _Question(question: '24 ÷ 3 + 8 = ?', options: ['16', '17', '8'], correctIndex: 0),
+  _Question(question: '36 ÷ 6 ÷ 2 + 1 = ?', options: ['3', '6', '4'], correctIndex: 2),
+  _Question(question: '9 x 9 ÷ 9 + 9 = ?', options: ['9', '0', '18'], correctIndex: 2),
+  _Question(question: '28 + 46 + 13 = ?', options: ['88', '87', '89'], correctIndex: 1),
+  _Question(question: '84 - 7 x 2 = ?', options: ['154', '140', '130'], correctIndex: 0),
 
   // لول ۲۶-۳۰ — توان + ترکیبی سخت
-  _Question(question: '2² = ?', options: ['2', '4', '8'], correctIndex: 1),
-  _Question(question: '3² = ?', options: ['6', '8', '9'], correctIndex: 2),
-  _Question(question: '2³ = ?', options: ['6', '8', '9'], correctIndex: 1),
-  _Question(question: '4² + 3 = ?', options: ['17', '19', '18'], correctIndex: 1),
+  _Question(question: '2² + 23 = ?', options: ['27', '24', '28'], correctIndex: 0),
+  _Question(question: '3² - 7 x 2 = ?', options: ['8', '4', '16'], correctIndex: 1),
+  _Question(question: '2³ - 8 x 1 = ?', options: ['0', '1', '8'], correctIndex: 0),
+  _Question(question: '4² + 3 ÷ 2= ?', options: ['8', '19', '9'], correctIndex: 0),
   _Question(question: '(5 × 4) - 2³ = ?', options: ['10', '12', '14'], correctIndex: 1),
 ];
 
