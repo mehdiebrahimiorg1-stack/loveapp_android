@@ -8,6 +8,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'services/upload_service.dart';
 import 'services/background_service.dart';
 import 'game_2048.dart';
+import 'game_math.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -385,6 +386,18 @@ class _GamesListScreenState extends State<GamesListScreen> {
                       context,
                       MaterialPageRoute(
                           builder: (_) => const Game2048Screen()),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _GameCard(
+                    title: 'ریاضی',
+                    description: '۳۰ لول از ساده تا سخت — ۳ ستاره داری!',
+                    icon: '🧮',
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const GameMathScreen()),
                     ),
                   ),
                 ],
