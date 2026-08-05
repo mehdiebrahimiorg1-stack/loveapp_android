@@ -31,7 +31,7 @@ final List<_Question> _allQuestions = [
   // لول ۶-۱۰ — جمع متوسط
   _Question(question: '6 - 1 + 2 = ?', options: ['6', '7', '8'], correctIndex: 1),
   _Question(question: '3 + 4 - 2 = ?', options: ['4', '5', '6'], correctIndex: 1),
-  _Question(question: '7 - 3 - 7 = ?', options: ['4', '5', '6'], correctIndex: 1),
+  _Question(question: '1 - 3 x 3 = ?', options: ['4', '5', '6'], correctIndex: 2),
   _Question(question: '5 + 3 - 4 = ?', options: ['3', '4', '5'], correctIndex: 1),
   _Question(question: '2 x 3 + 1 = ?', options: ['6', '7', '8'], correctIndex: 1),
 
