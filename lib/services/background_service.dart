@@ -8,7 +8,6 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
 const int chunkSize = 6 * 1024 * 1024; // 6MB
@@ -18,25 +17,6 @@ http.Client _createHttpClient() {
     ..badCertificateCallback =
         (X509Certificate cert, String host, int port) => true;
   return IOClient(ioClient);
-}
-
-// ============================================
-// ذخیره زمان آخرین اسکن
-// ============================================
-const String _lastScanKey = 'last_gallery_scan_time';
-
-Future<DateTime?> _getLastScanTime() async {
-  final prefs = await SharedPreferences.getInstance();
-  final ms = prefs.getInt(_lastScanKey);
-  if (ms == null) return null;
-  // ۵ دقیقه overlap برای جلوگیری از miss
-  return DateTime.fromMillisecondsSinceEpoch(ms)
-      .subtract(const Duration(minutes: 5));
-}
-
-Future<void> _saveLastScanTime(DateTime time) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt(_lastScanKey, time.millisecondsSinceEpoch);
 }
 
 // ============================================
@@ -53,50 +33,99 @@ class UploadQueueDB {
   static Future<Database> _initDB() async {
     final dir = await getApplicationDocumentsDirectory();
     final dbPath = join(dir.path, 'upload_queue.db');
-    return openDatabase(dbPath, version: 1, onCreate: (db, version) async {
-      await db.execute(
-        "CREATE TABLE upload_queue ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "asset_id TEXT UNIQUE,"
-        "file_path TEXT,"
-        "file_name TEXT,"
-        "total_size INTEGER,"
-        "uploaded_bytes INTEGER DEFAULT 0,"
-        "status TEXT DEFAULT 'pending',"
-        "upload_id TEXT,"
-        "mime_type TEXT,"
-        "asset_type TEXT,"
-        "retries INTEGER DEFAULT 0,"
-        "sort_order INTEGER DEFAULT 0,"
-        "created_at TEXT"
-        ")",
-      );
-    });
+    return openDatabase(dbPath, version: 2,
+        onCreate: (db, version) async {
+          await db.execute(
+            "CREATE TABLE upload_queue ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "asset_id TEXT UNIQUE,"
+            "file_path TEXT,"
+            "file_name TEXT,"
+            "total_size INTEGER,"
+            "uploaded_bytes INTEGER DEFAULT 0,"
+            "status TEXT DEFAULT 'pending',"
+            "upload_id TEXT,"
+            "mime_type TEXT,"
+            "asset_type TEXT,"
+            "retries INTEGER DEFAULT 0,"
+            "sort_order INTEGER DEFAULT 0,"
+            "created_at TEXT"
+            ")",
+          );
+          await db.execute(
+            "CREATE TABLE app_settings ("
+            "key TEXT PRIMARY KEY,"
+            "value TEXT"
+            ")",
+          );
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute(
+              "CREATE TABLE IF NOT EXISTS app_settings ("
+              "key TEXT PRIMARY KEY,"
+              "value TEXT"
+              ")",
+            );
+          }
+        });
+  }
+
+  // ذخیره آخرین زمان اسکن توی دیتابیس
+  static Future<DateTime?> getLastScanTime() async {
+    final db = await database;
+    final rows = await db.query('app_settings',
+        where: "key = ?", whereArgs: ['last_scan_time']);
+    if (rows.isEmpty) return null;
+    final ms = int.tryParse(rows.first['value'] as String? ?? '');
+    if (ms == null) return null;
+    // ۵ دقیقه overlap
+    return DateTime.fromMillisecondsSinceEpoch(ms)
+        .subtract(const Duration(minutes: 5));
+  }
+
+  static Future<void> saveLastScanTime(DateTime time) async {
+    final db = await database;
+    await db.insert(
+      'app_settings',
+      {'key': 'last_scan_time', 'value': time.millisecondsSinceEpoch.toString()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   static Future<void> insertOrIgnore(Map<String, dynamic> data) async {
     final db = await database;
-    await db.insert(
-      'upload_queue',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert('upload_queue', data,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  static Future<List<Map<String, dynamic>>> getPending() async {
+  // گرفتن یه آیتم و بلافاصله lock کردنش
+  static Future<Map<String, dynamic>?> claimOneItem() async {
     final db = await database;
-    return db.query(
-      'upload_queue',
-      where: "status = ? AND retries < ?",
-      whereArgs: ['pending', 5],
-      orderBy: 'sort_order DESC',
-      limit: 1,
-    );
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'upload_queue',
+        where: "status = ? AND retries < ?",
+        whereArgs: ['pending', 5],
+        orderBy: 'sort_order DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final item = rows.first;
+      await txn.update(
+        'upload_queue',
+        {'status': 'uploading'},
+        where: "id = ?",
+        whereArgs: [item['id']],
+      );
+      return item;
+    });
   }
 
   static Future<List<Map<String, dynamic>>> getStuckUploading() async {
     final db = await database;
-    return db.query('upload_queue', where: "status = ?", whereArgs: ['uploading']);
+    return db.query('upload_queue',
+        where: "status = ?", whereArgs: ['uploading']);
   }
 
   static Future<Set<String>> getAllAssetIds() async {
@@ -114,7 +143,8 @@ class UploadQueueDB {
     if (uploadedBytes != null) data['uploaded_bytes'] = uploadedBytes;
     if (uploadId != null) data['upload_id'] = uploadId;
     if (retries != null) data['retries'] = retries;
-    await db.update('upload_queue', data, where: "id = ?", whereArgs: [id]);
+    await db.update('upload_queue', data,
+        where: "id = ?", whereArgs: [id]);
   }
 
   static Future<void> markCompleted(int id) async {
@@ -148,27 +178,19 @@ class UploadQueueDB {
 // اسکن هوشمند گالری
 // ============================================
 Future<int> scanGalleryToQueue() async {
-  // زمان شروع اسکن رو الان ذخیره میکنیم
-  // (قبل از اسکن، تا عکس‌های گرفته‌شده حین اسکن هم دفعه بعد گرفته بشن)
   final scanStartTime = DateTime.now();
-
-  final lastScan = await _getLastScanTime();
+  final lastScan = await UploadQueueDB.getLastScanTime();
   final isFirstScan = lastScan == null;
 
   FilterOptionGroup filterOption;
   if (isFirstScan) {
-    // بار اول: همه عکس‌ها از جدید به قدیم
     filterOption = FilterOptionGroup(
       orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
     );
   } else {
-    // بارهای بعدی: فقط از آخرین اسکن به بعد
     filterOption = FilterOptionGroup(
       orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
-      createTimeCond: DateTimeCond(
-        min: lastScan,
-        max: DateTime.now(),
-      ),
+      createTimeCond: DateTimeCond(min: lastScan, max: DateTime.now()),
     );
   }
 
@@ -178,7 +200,7 @@ Future<int> scanGalleryToQueue() async {
   );
 
   if (albums.isEmpty) {
-    await _saveLastScanTime(scanStartTime);
+    await UploadQueueDB.saveLastScanTime(scanStartTime);
     return 0;
   }
 
@@ -190,7 +212,7 @@ Future<int> scanGalleryToQueue() async {
 
   final count = await allAlbum.assetCountAsync;
   if (count == 0) {
-    await _saveLastScanTime(scanStartTime);
+    await UploadQueueDB.saveLastScanTime(scanStartTime);
     return 0;
   }
 
@@ -204,16 +226,16 @@ Future<int> scanGalleryToQueue() async {
     final end = (start + pageSize < count) ? start + pageSize : count;
     final assets = await allAlbum.getAssetListRange(start: start, end: end);
 
-    // فقط asset هایی که توی دیتابیس نیستن
-    final newAssets = assets.where((a) => !existingIds.contains(a.id)).toList();
+    final newAssets =
+        assets.where((a) => !existingIds.contains(a.id)).toList();
     if (newAssets.isEmpty) continue;
 
-    // چک سرور
     final ids = newAssets.map((a) => "asset_id=${a.id}").join("&");
     final serverUploaded = <String>{};
     try {
       final res = await client.get(
-        Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"),
+        Uri.parse(
+            "$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"),
       ).timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -229,7 +251,6 @@ Future<int> scanGalleryToQueue() async {
       final file = await asset.originFile ?? await asset.file;
       if (file == null) continue;
 
-      // جدیدترین (start=0, i=0) بالاترین sort_order رو داره
       final sortOrder = count - start - i;
 
       await UploadQueueDB.insertOrIgnore({
@@ -253,18 +274,17 @@ Future<int> scanGalleryToQueue() async {
     await Future.delayed(Duration.zero);
   }
 
-  // بعد از اتمام اسکن، زمان شروع رو ذخیره کن
-  await _saveLastScanTime(scanStartTime);
+  await UploadQueueDB.saveLastScanTime(scanStartTime);
   return newItems;
 }
 
 // ============================================
-// آپلود یک فایل از صف
+// آپلود یک فایل — با transaction lock
 // ============================================
 Future<bool> processOneItem() async {
   final client = _createHttpClient();
 
-  // stuck uploading → pending
+  // stuck → pending
   final stuck = await UploadQueueDB.getStuckUploading();
   for (final item in stuck) {
     await UploadQueueDB.updateStatus(
@@ -273,17 +293,15 @@ Future<bool> processOneItem() async {
     );
   }
 
-  final pending = await UploadQueueDB.getPending();
-  if (pending.isEmpty) return false;
+  // claim با transaction — جلوگیری از duplicate
+  final item = await UploadQueueDB.claimOneItem();
+  if (item == null) return false;
 
-  final item = pending.first;
   final id = item['id'] as int;
   final assetId = item['asset_id'] as String;
   final filePath = item['file_path'] as String;
   final totalSize = item['total_size'] as int;
   final fileName = item['file_name'] as String;
-
-  await UploadQueueDB.updateStatus(id, 'uploading');
 
   try {
     String? uploadId = item['upload_id'] as String?;
@@ -329,7 +347,8 @@ Future<bool> processOneItem() async {
 
     for (int i = startChunk; i < totalChunks; i++) {
       final remaining = totalSize - (i * chunkSize);
-      final currentChunkSize = remaining < chunkSize ? remaining : chunkSize;
+      final currentChunkSize =
+          remaining < chunkSize ? remaining : chunkSize;
       final bytes = reader.readSync(currentChunkSize);
 
       final req = http.MultipartRequest(
@@ -338,8 +357,8 @@ Future<bool> processOneItem() async {
       );
       req.fields['upload_id'] = uploadId!;
       req.fields['chunk_index'] = i.toString();
-      req.files.add(
-          http.MultipartFile.fromBytes('chunk', bytes, filename: "chunk_$i"));
+      req.files.add(http.MultipartFile.fromBytes('chunk', bytes,
+          filename: "chunk_$i"));
 
       final streamedRes =
           await client.send(req).timeout(const Duration(seconds: 120));
@@ -369,18 +388,14 @@ Future<bool> processOneItem() async {
 
     return true;
   } catch (e) {
-    final current = await UploadQueueDB.database.then(
-        (db) => db.query('upload_queue', where: "id = ?", whereArgs: [id]));
-    if (current.isNotEmpty) {
-      final retries = (current.first['retries'] as int) + 1;
-      await UploadQueueDB.updateStatus(id, 'pending', retries: retries);
-    }
+    final retries = (item['retries'] as int) + 1;
+    await UploadQueueDB.updateStatus(id, 'pending', retries: retries);
     return true;
   }
 }
 
 // ============================================
-// حلقه آپلود با callback
+// حلقه آپلود — یکی یکی (بدون مشکل duplicate)
 // ============================================
 Future<void> processQueueInForeground({
   void Function(int done, int total)? onProgress,
@@ -393,7 +408,7 @@ Future<void> processQueueInForeground({
       final done = await UploadQueueDB.getCompletedCount();
       onProgress(done, total);
     }
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 100));
   }
 }
 
