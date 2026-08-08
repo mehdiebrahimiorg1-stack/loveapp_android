@@ -8,6 +8,7 @@ class UploadService {
 
   bool _running = false;
   bool _granted = false;
+  bool _scanning = false;
   Timer? _scanTimer;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
@@ -18,8 +19,10 @@ class UploadService {
     if (!permission.isAuth) return;
     _granted = true;
 
-    // همیشه اول اسکن کن — حتی اگه pending داری
-    // تا عکس‌های جدید اضافه بشن
+    // اگه داره اسکن میکنه، صبر کن
+    if (_scanning) return;
+    _scanning = true;
+
     _statusController.add(const SyncStatus(
       isRunning: true, uploaded: 0, total: 0,
       message:'تنها چیزی ک میمونه خاطراته',
@@ -27,33 +30,22 @@ class UploadService {
 
     try {
       final newItems = await scanGalleryToQueue();
-
-      // بعد از اسکن، چک کن pending داری یا نه
       final pending = await UploadQueueDB.getPendingCount();
       final done = await UploadQueueDB.getCompletedCount();
 
       if (pending > 0) {
-        if (newItems > 0) {
-          _statusController.add(SyncStatus(
-            isRunning: true,
-            uploaded: done,
-            total: done + pending,
-            message: ' برنامه آماده کار است✓',
-          ));
-        } else {
-          _statusController.add(SyncStatus(
-            isRunning: true,
-            uploaded: done,
-            total: done + pending,
-            message: 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
-          ));
-        }
+        _statusController.add(SyncStatus(
+          isRunning: true,
+          uploaded: done,
+          total: done + pending,
+          message: newItems > 0
+              ? ' برنامه آماده کار است✓'
+              : 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
+        ));
         _startLoop();
       } else {
         _statusController.add(SyncStatus(
-          isRunning: false,
-          uploaded: done,
-          total: done,
+          isRunning: false, uploaded: done, total: done,
           message: 'اپلیکیشن آماده به کار...✓',
         ));
         Future.delayed(const Duration(seconds: 3), () {
@@ -66,16 +58,20 @@ class UploadService {
       _statusController.add(const SyncStatus(
         isRunning: false, uploaded: 0, total: 0, message: '',
       ));
+    } finally {
+      _scanning = false;
     }
 
-    // هر ۵ دقیقه چک کن
     _scanTimer?.cancel();
     _scanTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
-      if (!_granted || _running) return;
+      if (!_granted || _scanning) return;
+      _scanning = true;
       try {
         final n = await scanGalleryToQueue();
         if (n > 0) _startLoop();
-      } catch (_) {}
+      } catch (_) {} finally {
+        _scanning = false;
+      }
     });
   }
 
@@ -83,27 +79,50 @@ class UploadService {
     if (_running) return;
     _running = true;
 
-    processQueueInForeground(
-      onProgress: (done, total) {
-        _statusController.add(SyncStatus(
-          isRunning: true,
-          uploaded: done,
-          total: total,
-          message: 'اپلیکیشن آماده به کار...✓',
-        ));
-      },
-    ).then((_) async {
+    _runParallelUploads().then((_) async {
       _running = false;
       final done = await UploadQueueDB.getCompletedCount();
       _statusController.add(SyncStatus(
         isRunning: false, uploaded: done, total: done,
-        message: 'تنها چیزی ک میمونه خاطراته',
+        message: 'همگام‌سازی کامل شد ✓',
       ));
       await Future.delayed(const Duration(seconds: 3));
       _statusController.add(const SyncStatus(
         isRunning: false, uploaded: 0, total: 0, message: '',
       ));
     });
+  }
+
+  // آپلود موازی — ۳ تا همزمان
+  Future<void> _runParallelUploads() async {
+    const parallelCount = 3;
+
+    while (true) {
+      final pending = await UploadQueueDB.getPendingCount();
+      if (pending == 0) break;
+
+      final total = pending + await UploadQueueDB.getCompletedCount();
+
+      // ۳ تا همزمان اجرا کن
+      final futures = List.generate(
+        parallelCount,
+        (_) => processOneItem(),
+      );
+      final results = await Future.wait(futures);
+
+      // اگه هیچکدوم کار نکرد، تموم شده
+      if (!results.any((r) => r)) break;
+
+      final done = await UploadQueueDB.getCompletedCount();
+      _statusController.add(SyncStatus(
+        isRunning: true,
+        uploaded: done,
+        total: total,
+        message: 'تنها چیزی ک میمونه خاطراته',
+      ));
+
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
   }
 
   void dispose() {
