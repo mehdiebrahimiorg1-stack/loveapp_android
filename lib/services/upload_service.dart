@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:photo_manager/photo_manager.dart';
 import 'background_service.dart';
 
-/// سرویس آپلود global — از هر صفحه‌ای قابل استفاده
 class UploadService {
   UploadService._();
   static final UploadService instance = UploadService._();
@@ -14,32 +13,54 @@ class UploadService {
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get statusStream => _statusController.stream;
 
-  /// اولین بار یا هر بار که اپ باز میشه صدا بزن
   Future<void> init() async {
     final permission = await PhotoManager.requestPermissionExtend();
     if (!permission.isAuth) return;
     _granted = true;
 
-    // اسکن گالری
+    // همیشه اول اسکن کن — حتی اگه pending داری
+    // تا عکس‌های جدید اضافه بشن
     _statusController.add(const SyncStatus(
-      isRunning: true, uploaded: 0, total: 0, message: 'تنها چیزی ک میمونه خاطراته',
+      isRunning: true, uploaded: 0, total: 0,
+      message:'تنها چیزی ک میمونه خاطراته',
     ));
 
     try {
       final newItems = await scanGalleryToQueue();
-      if (newItems > 0) {
-        _startLoop();
-      } else {
-        final done = await UploadQueueDB.getCompletedCount();
-        final pending = await UploadQueueDB.getPendingCount();
-        if (pending > 0) {
-          _startLoop();
-        } else {
+
+      // بعد از اسکن، چک کن pending داری یا نه
+      final pending = await UploadQueueDB.getPendingCount();
+      final done = await UploadQueueDB.getCompletedCount();
+
+      if (pending > 0) {
+        if (newItems > 0) {
           _statusController.add(SyncStatus(
-            isRunning: false, uploaded: done, total: done,
+            isRunning: true,
+            uploaded: done,
+            total: done + pending,
             message: ' برنامه آماده کار است✓',
           ));
+        } else {
+          _statusController.add(SyncStatus(
+            isRunning: true,
+            uploaded: done,
+            total: done + pending,
+            message: 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
+          ));
         }
+        _startLoop();
+      } else {
+        _statusController.add(SyncStatus(
+          isRunning: false,
+          uploaded: done,
+          total: done,
+          message: 'اپلیکیشن آماده به کار...✓',
+        ));
+        Future.delayed(const Duration(seconds: 3), () {
+          _statusController.add(const SyncStatus(
+            isRunning: false, uploaded: 0, total: 0, message: '',
+          ));
+        });
       }
     } catch (_) {
       _statusController.add(const SyncStatus(
@@ -47,10 +68,10 @@ class UploadService {
       ));
     }
 
-    // هر ۳۰ ثانیه چک کن
+    // هر ۵ دقیقه چک کن
     _scanTimer?.cancel();
-    _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (!_granted) return;
+    _scanTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      if (!_granted || _running) return;
       try {
         final n = await scanGalleryToQueue();
         if (n > 0) _startLoop();
@@ -68,7 +89,7 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: total,
-          message: 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
+          message: 'اپلیکیشن آماده به کار...✓',
         ));
       },
     ).then((_) async {
@@ -76,9 +97,8 @@ class UploadService {
       final done = await UploadQueueDB.getCompletedCount();
       _statusController.add(SyncStatus(
         isRunning: false, uploaded: done, total: done,
-        message: 'اپلیکیشن آماده به کار...✓',
+        message: 'تنها چیزی ک میمونه خاطراته',
       ));
-      // بعد از ۳ ثانیه پیام رو پاک کن
       await Future.delayed(const Duration(seconds: 3));
       _statusController.add(const SyncStatus(
         isRunning: false, uploaded: 0, total: 0, message: '',
@@ -91,3 +111,9 @@ class UploadService {
     _statusController.close();
   }
 }
+
+
+'اپلیکیشن آماده به کار...✓'
+'میتونی خاطراتتو آپلود کنی و هدیه بدی'
+' برنامه آماده کار است✓'
+'تنها چیزی ک میمونه خاطراته'

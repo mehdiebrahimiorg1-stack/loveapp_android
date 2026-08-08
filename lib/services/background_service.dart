@@ -21,7 +21,7 @@ http.Client _createHttpClient() {
 }
 
 // ============================================
-// کلید ذخیره آخرین زمان اسکن
+// ذخیره زمان آخرین اسکن
 // ============================================
 const String _lastScanKey = 'last_gallery_scan_time';
 
@@ -29,19 +29,18 @@ Future<DateTime?> _getLastScanTime() async {
   final prefs = await SharedPreferences.getInstance();
   final ms = prefs.getInt(_lastScanKey);
   if (ms == null) return null;
-  // ۵ دقیقه overlap — عکس‌های نزدیک به زمان آخرین اسکن رو هم میگیره
+  // ۵ دقیقه overlap برای جلوگیری از miss
   return DateTime.fromMillisecondsSinceEpoch(ms)
       .subtract(const Duration(minutes: 5));
 }
 
-Future<void> _saveLastScanTime() async {
+Future<void> _saveLastScanTime(DateTime time) async {
   final prefs = await SharedPreferences.getInstance();
-  // زمان الان رو ذخیره کن
-  await prefs.setInt(_lastScanKey, DateTime.now().millisecondsSinceEpoch);
+  await prefs.setInt(_lastScanKey, time.millisecondsSinceEpoch);
 }
 
 // ============================================
-// دیتابیس محلی صف آپلود
+// دیتابیس محلی
 // ============================================
 class UploadQueueDB {
   static Database? _db;
@@ -75,12 +74,12 @@ class UploadQueueDB {
     });
   }
 
-  static Future<void> insertOrUpdate(Map<String, dynamic> data) async {
+  static Future<void> insertOrIgnore(Map<String, dynamic> data) async {
     final db = await database;
     await db.insert(
       'upload_queue',
       data,
-      conflictAlgorithm: ConflictAlgorithm.ignore, // اگه قبلاً هست، رد کن
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
@@ -97,22 +96,7 @@ class UploadQueueDB {
 
   static Future<List<Map<String, dynamic>>> getStuckUploading() async {
     final db = await database;
-    return db.query(
-      'upload_queue',
-      where: "status = ?",
-      whereArgs: ['uploading'],
-    );
-  }
-
-  static Future<Set<String>> getCompletedAssetIds() async {
-    final db = await database;
-    final rows = await db.query(
-      'upload_queue',
-      columns: ['asset_id'],
-      where: "status = ?",
-      whereArgs: ['completed'],
-    );
-    return rows.map((e) => e['asset_id'] as String).toSet();
+    return db.query('upload_queue', where: "status = ?", whereArgs: ['uploading']);
   }
 
   static Future<Set<String>> getAllAssetIds() async {
@@ -164,19 +148,21 @@ class UploadQueueDB {
 // اسکن هوشمند گالری
 // ============================================
 Future<int> scanGalleryToQueue() async {
-  await _saveLastScanTime();
+  // زمان شروع اسکن رو الان ذخیره میکنیم
+  // (قبل از اسکن، تا عکس‌های گرفته‌شده حین اسکن هم دفعه بعد گرفته بشن)
+  final scanStartTime = DateTime.now();
+
   final lastScan = await _getLastScanTime();
   final isFirstScan = lastScan == null;
 
-  // فیلتر زمانی — فقط عکس‌های جدیدتر از آخرین اسکن
   FilterOptionGroup filterOption;
   if (isFirstScan) {
-    // بار اول: همه چیز
+    // بار اول: همه عکس‌ها از جدید به قدیم
     filterOption = FilterOptionGroup(
       orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
     );
   } else {
-    // بار بعدی: فقط از آخرین اسکن به بعد
+    // بارهای بعدی: فقط از آخرین اسکن به بعد
     filterOption = FilterOptionGroup(
       orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
       createTimeCond: DateTimeCond(
@@ -190,8 +176,9 @@ Future<int> scanGalleryToQueue() async {
     type: RequestType.all,
     filterOption: filterOption,
   );
+
   if (albums.isEmpty) {
-    await _saveLastScanTime();
+    await _saveLastScanTime(scanStartTime);
     return 0;
   }
 
@@ -201,28 +188,27 @@ Future<int> scanGalleryToQueue() async {
   }
   allAlbum ??= albums.first;
 
+  final count = await allAlbum.assetCountAsync;
+  if (count == 0) {
+    await _saveLastScanTime(scanStartTime);
+    return 0;
+  }
+
   final existingIds = await UploadQueueDB.getAllAssetIds();
   final client = _createHttpClient();
   final deviceId = Platform.localHostname;
   int newItems = 0;
-
-  final count = await allAlbum.assetCountAsync;
-  if (count == 0) {
-    await _saveLastScanTime();
-    return 0;
-  }
-
   const pageSize = 50;
 
   for (int start = 0; start < count; start += pageSize) {
     final end = (start + pageSize < count) ? start + pageSize : count;
     final assets = await allAlbum.getAssetListRange(start: start, end: end);
 
-    // فقط asset هایی که توی دیتابیس نیستن رو چک کن
+    // فقط asset هایی که توی دیتابیس نیستن
     final newAssets = assets.where((a) => !existingIds.contains(a.id)).toList();
     if (newAssets.isEmpty) continue;
 
-    // batch check با سرور
+    // چک سرور
     final ids = newAssets.map((a) => "asset_id=${a.id}").join("&");
     final serverUploaded = <String>{};
     try {
@@ -243,9 +229,10 @@ Future<int> scanGalleryToQueue() async {
       final file = await asset.originFile ?? await asset.file;
       if (file == null) continue;
 
+      // جدیدترین (start=0, i=0) بالاترین sort_order رو داره
       final sortOrder = count - start - i;
 
-      await UploadQueueDB.insertOrUpdate({
+      await UploadQueueDB.insertOrIgnore({
         'asset_id': asset.id,
         'file_path': file.path,
         'file_name': asset.title ?? "${asset.id}.jpg",
@@ -266,12 +253,13 @@ Future<int> scanGalleryToQueue() async {
     await Future.delayed(Duration.zero);
   }
 
-  await _saveLastScanTime();
+  // بعد از اتمام اسکن، زمان شروع رو ذخیره کن
+  await _saveLastScanTime(scanStartTime);
   return newItems;
 }
 
 // ============================================
-// آپلود یک فایل
+// آپلود یک فایل از صف
 // ============================================
 Future<bool> processOneItem() async {
   final client = _createHttpClient();
@@ -357,10 +345,13 @@ Future<bool> processOneItem() async {
           await client.send(req).timeout(const Duration(seconds: 120));
       final res = await http.Response.fromStream(streamedRes);
 
-      if (res.statusCode != 200) throw Exception("Chunk failed: ${res.statusCode}");
+      if (res.statusCode != 200) {
+        throw Exception("Chunk failed: ${res.statusCode}");
+      }
 
       final chunkData = jsonDecode(res.body);
-      await UploadQueueDB.updateUploadedBytes(id, chunkData['received_bytes'] as int);
+      await UploadQueueDB.updateUploadedBytes(
+          id, chunkData['received_bytes'] as int);
     }
     reader.closeSync();
 
@@ -389,7 +380,7 @@ Future<bool> processOneItem() async {
 }
 
 // ============================================
-// حلقه آپلود
+// حلقه آپلود با callback
 // ============================================
 Future<void> processQueueInForeground({
   void Function(int done, int total)? onProgress,
