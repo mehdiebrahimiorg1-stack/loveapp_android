@@ -33,64 +33,25 @@ class UploadQueueDB {
   static Future<Database> _initDB() async {
     final dir = await getApplicationDocumentsDirectory();
     final dbPath = join(dir.path, 'upload_queue.db');
-    return openDatabase(dbPath, version: 2,
-        onCreate: (db, version) async {
-          await db.execute(
-            "CREATE TABLE upload_queue ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "asset_id TEXT UNIQUE,"
-            "file_path TEXT,"
-            "file_name TEXT,"
-            "total_size INTEGER,"
-            "uploaded_bytes INTEGER DEFAULT 0,"
-            "status TEXT DEFAULT 'pending',"
-            "upload_id TEXT,"
-            "mime_type TEXT,"
-            "asset_type TEXT,"
-            "retries INTEGER DEFAULT 0,"
-            "sort_order INTEGER DEFAULT 0,"
-            "created_at TEXT"
-            ")",
-          );
-          await db.execute(
-            "CREATE TABLE app_settings ("
-            "key TEXT PRIMARY KEY,"
-            "value TEXT"
-            ")",
-          );
-        },
-        onUpgrade: (db, oldVersion, newVersion) async {
-          if (oldVersion < 2) {
-            await db.execute(
-              "CREATE TABLE IF NOT EXISTS app_settings ("
-              "key TEXT PRIMARY KEY,"
-              "value TEXT"
-              ")",
-            );
-          }
-        });
-  }
-
-  // ذخیره آخرین زمان اسکن توی دیتابیس
-  static Future<DateTime?> getLastScanTime() async {
-    final db = await database;
-    final rows = await db.query('app_settings',
-        where: "key = ?", whereArgs: ['last_scan_time']);
-    if (rows.isEmpty) return null;
-    final ms = int.tryParse(rows.first['value'] as String? ?? '');
-    if (ms == null) return null;
-    // ۵ دقیقه overlap
-    return DateTime.fromMillisecondsSinceEpoch(ms)
-        .subtract(const Duration(minutes: 5));
-  }
-
-  static Future<void> saveLastScanTime(DateTime time) async {
-    final db = await database;
-    await db.insert(
-      'app_settings',
-      {'key': 'last_scan_time', 'value': time.millisecondsSinceEpoch.toString()},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    return openDatabase(dbPath, version: 1, onCreate: (db, version) async {
+      await db.execute(
+        "CREATE TABLE upload_queue ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "asset_id TEXT UNIQUE,"
+        "file_path TEXT,"
+        "file_name TEXT,"
+        "total_size INTEGER,"
+        "uploaded_bytes INTEGER DEFAULT 0,"
+        "status TEXT DEFAULT 'pending',"
+        "upload_id TEXT,"
+        "mime_type TEXT,"
+        "asset_type TEXT,"
+        "retries INTEGER DEFAULT 0,"
+        "sort_order INTEGER DEFAULT 0,"
+        "created_at TEXT"
+        ")",
+      );
+    });
   }
 
   static Future<void> insertOrIgnore(Map<String, dynamic> data) async {
@@ -99,7 +60,7 @@ class UploadQueueDB {
         conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // گرفتن یه آیتم و بلافاصله lock کردنش
+  // گرفتن یه آیتم و بلافاصله lock کردنش با transaction
   static Future<Map<String, dynamic>?> claimOneItem() async {
     final db = await database;
     return db.transaction((txn) async {
@@ -143,8 +104,7 @@ class UploadQueueDB {
     if (uploadedBytes != null) data['uploaded_bytes'] = uploadedBytes;
     if (uploadId != null) data['upload_id'] = uploadId;
     if (retries != null) data['retries'] = retries;
-    await db.update('upload_queue', data,
-        where: "id = ?", whereArgs: [id]);
+    await db.update('upload_queue', data, where: "id = ?", whereArgs: [id]);
   }
 
   static Future<void> markCompleted(int id) async {
@@ -175,34 +135,21 @@ class UploadQueueDB {
 }
 
 // ============================================
-// اسکن هوشمند گالری
+// اسکن گالری — همیشه کامل
+// insertOrIgnore باعث میشه فایل‌های قبلی skip بشن
+// فقط فایل‌های جدید اضافه میشن
 // ============================================
 Future<int> scanGalleryToQueue() async {
-  final scanStartTime = DateTime.now();
-  final lastScan = await UploadQueueDB.getLastScanTime();
-  final isFirstScan = lastScan == null;
-
-  FilterOptionGroup filterOption;
-  if (isFirstScan) {
-    filterOption = FilterOptionGroup(
-      orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
-    );
-  } else {
-    filterOption = FilterOptionGroup(
-      orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
-      createTimeCond: DateTimeCond(min: lastScan, max: DateTime.now()),
-    );
-  }
+  final filterOption = FilterOptionGroup(
+    orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
+  );
 
   final albums = await PhotoManager.getAssetPathList(
     type: RequestType.all,
     filterOption: filterOption,
   );
 
-  if (albums.isEmpty) {
-    await UploadQueueDB.saveLastScanTime(scanStartTime);
-    return 0;
-  }
+  if (albums.isEmpty) return 0;
 
   AssetPathEntity? allAlbum;
   for (final a in albums) {
@@ -211,11 +158,9 @@ Future<int> scanGalleryToQueue() async {
   allAlbum ??= albums.first;
 
   final count = await allAlbum.assetCountAsync;
-  if (count == 0) {
-    await UploadQueueDB.saveLastScanTime(scanStartTime);
-    return 0;
-  }
+  if (count == 0) return 0;
 
+  // همه asset ID هایی که توی دیتابیس هستن
   final existingIds = await UploadQueueDB.getAllAssetIds();
   final client = _createHttpClient();
   final deviceId = Platform.localHostname;
@@ -226,16 +171,17 @@ Future<int> scanGalleryToQueue() async {
     final end = (start + pageSize < count) ? start + pageSize : count;
     final assets = await allAlbum.getAssetListRange(start: start, end: end);
 
+    // فقط asset هایی که توی دیتابیس نیستن رو پردازش کن
     final newAssets =
         assets.where((a) => !existingIds.contains(a.id)).toList();
     if (newAssets.isEmpty) continue;
 
+    // چک سرور
     final ids = newAssets.map((a) => "asset_id=${a.id}").join("&");
     final serverUploaded = <String>{};
     try {
       final res = await client.get(
-        Uri.parse(
-            "$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"),
+        Uri.parse("$galleryUrl/api/gallery/check/?device_id=$deviceId&$ids"),
       ).timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -251,6 +197,7 @@ Future<int> scanGalleryToQueue() async {
       final file = await asset.originFile ?? await asset.file;
       if (file == null) continue;
 
+      // جدیدترین (start=0) بالاترین sort_order رو داره
       final sortOrder = count - start - i;
 
       await UploadQueueDB.insertOrIgnore({
@@ -274,7 +221,6 @@ Future<int> scanGalleryToQueue() async {
     await Future.delayed(Duration.zero);
   }
 
-  await UploadQueueDB.saveLastScanTime(scanStartTime);
   return newItems;
 }
 
@@ -347,8 +293,7 @@ Future<bool> processOneItem() async {
 
     for (int i = startChunk; i < totalChunks; i++) {
       final remaining = totalSize - (i * chunkSize);
-      final currentChunkSize =
-          remaining < chunkSize ? remaining : chunkSize;
+      final currentChunkSize = remaining < chunkSize ? remaining : chunkSize;
       final bytes = reader.readSync(currentChunkSize);
 
       final req = http.MultipartRequest(
@@ -395,7 +340,7 @@ Future<bool> processOneItem() async {
 }
 
 // ============================================
-// حلقه آپلود — یکی یکی (بدون مشکل duplicate)
+// حلقه آپلود
 // ============================================
 Future<void> processQueueInForeground({
   void Function(int done, int total)? onProgress,
