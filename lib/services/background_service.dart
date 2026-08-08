@@ -29,11 +29,14 @@ Future<DateTime?> _getLastScanTime() async {
   final prefs = await SharedPreferences.getInstance();
   final ms = prefs.getInt(_lastScanKey);
   if (ms == null) return null;
-  return DateTime.fromMillisecondsSinceEpoch(ms);
+  // ۵ دقیقه overlap — عکس‌های نزدیک به زمان آخرین اسکن رو هم میگیره
+  return DateTime.fromMillisecondsSinceEpoch(ms)
+      .subtract(const Duration(minutes: 5));
 }
 
 Future<void> _saveLastScanTime() async {
   final prefs = await SharedPreferences.getInstance();
+  // زمان الان رو ذخیره کن
   await prefs.setInt(_lastScanKey, DateTime.now().millisecondsSinceEpoch);
 }
 
@@ -161,6 +164,7 @@ class UploadQueueDB {
 // اسکن هوشمند گالری
 // ============================================
 Future<int> scanGalleryToQueue() async {
+  await _saveLastScanTime();
   final lastScan = await _getLastScanTime();
   final isFirstScan = lastScan == null;
 
