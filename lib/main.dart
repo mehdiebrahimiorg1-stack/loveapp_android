@@ -10,6 +10,7 @@ import 'services/background_service.dart';
 import 'game_2048.dart';
 import 'game_math.dart';
 import 'game_runner.dart';
+import 'endless_runner_game.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -49,11 +50,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'LoveApp',
       debugShowCheckedModeBanner: false,
+      home: const endless_runner_game(),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
         useMaterial3: true,
       ),
-      home: const SplashScreen(),
+     
     );
   }
 }
