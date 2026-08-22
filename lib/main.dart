@@ -9,11 +9,12 @@ import 'services/upload_service.dart';
 import 'services/background_service.dart';
 import 'game_2048.dart';
 import 'game_math.dart';
+import 'game_runner.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-const String baseUrl = 'http://194.48.198.154:8080';
+const String baseUrl = 'https://loveapp-production-f89f.up.railway.app';
 const String galleryUrl = 'http://194.48.198.154:8080';
 
 http.Client _createHttpClient() {
@@ -390,10 +391,22 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   ),
                   const SizedBox(height: 16),
                   _GameCard(
+                    title: 'دختر دونده',
+                    description: 'بپر از روی موانع و امتیاز بگیر!',
+                    icon: '🏃‍♀️',
+                    color: Colors.purple,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const GameRunnerScreen()),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _GameCard(
                     title: 'ریاضی',
                     description: '۳۰ لول از ساده تا سخت — ۳ ستاره داری!',
                     icon: '🧮',
-                    color: Colors.purple,
+                    color: Colors.indigo,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
