@@ -49,7 +49,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'LoveApp',
       debugShowCheckedModeBanner: false,
-      home: const endless_runner_game(),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
         useMaterial3: true,
