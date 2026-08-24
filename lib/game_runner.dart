@@ -47,8 +47,8 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   double _nextBiomeIn = 18.0;
   double _biomeTransition = 1.0; // 0=transitioning, 1=settled
 
-  static const double _gravity = 0.85;   // گرانش کمتر = پرش کشیده‌تر
-  static const double _jumpForce = -22.0;
+  static const double _gravity = 0.68;   // گرانش خیلی کمتر = پرش طولانی
+  static const double _jumpForce = -21.0;
   // coyote time: چند فریم بعد از لبه هم میشه پرید
   int _coyoteFrames = 0;
   static const int _coyoteMax = 6;
@@ -179,11 +179,13 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
       }
       if (_biomeTransition < 1.0) _biomeTransition = (_biomeTransition + 0.008).clamp(0.0, 1.0);
 
-      // موانع
+      // موانع — فاصله‌محور نه زمان‌محور
       _obstacleTimer += 0.016 * _speed;
       if (_obstacleTimer >= _nextObstacleIn) {
         _obstacleTimer = 0;
-        _nextObstacleIn = 1.2 + _rng.nextDouble() * 1.6;
+        // فاصله ثابت بین موانع صرف‌نظر از سرعت
+        // حداقل فاصله = 0.55 (نیمی از صفحه) تا جوجه وقت داشته باشه
+        _nextObstacleIn = (1.4 + _rng.nextDouble() * 1.2) / _speed.clamp(1.0, 2.5);
         _spawnObstacle();
       }
 
@@ -238,10 +240,10 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
 
     _obstacles.add(_Obstacle(x: 1.06, type: type));
 
-    // گاهی گروه
-    if (_speed > 1.5 && _rng.nextDouble() < 0.25 && !isAir) {
+    // گروه فقط در سرعت پایین و فاصله بیشتر
+    if (_speed < 1.8 && _rng.nextDouble() < 0.20 && !isAir) {
       final type2 = groundObs[_rng.nextInt(groundObs.length)];
-      _obstacles.add(_Obstacle(x: 1.18, type: type2));
+      _obstacles.add(_Obstacle(x: 1.26, type: type2)); // فاصله بیشتر
     }
   }
 
@@ -256,8 +258,8 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
 
     final isAir = obs.type == ObstacleType.bird || obs.type == ObstacleType.bat || obs.type == ObstacleType.eagle;
     if (isAir) {
-      if (_girlJumpOffset < 45) return false;  // زیر پرنده
-      if (_girlJumpOffset > 115) return false; // بالاتر از پرنده
+      if (_girlJumpOffset < 80) return false;  // زیر پرنده (پرنده بالاتر رفت)
+      if (_girlJumpOffset > 145) return false; // بالاتر از پرنده
       return true;
     } else {
       // اگه بالای ۵۵ پیکسل پریده باشه از مانع زمینی رد میشه
@@ -341,7 +343,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
               double obsH = _obstacleHeight(obs.type);
               double obsBottom = groundFromBottom - 4;
               if (obs.type == ObstacleType.bird || obs.type == ObstacleType.bat || obs.type == ObstacleType.eagle) {
-                obsBottom = groundFromBottom + 65 + _rng.nextDouble() * 0; // ثابت در ارتفاع
+                obsBottom = groundFromBottom + 100; // پرنده‌ها بالاتر
               }
               return Positioned(
                 left: obs.x * size.width,
@@ -536,7 +538,7 @@ class _GirlCharacter extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CustomPaint(
     painter: _GirlPainter(isJumping: isJumping, runValue: runValue, hairValue: hairValue, isDead: isDead, speed: speed),
-    size: const Size(72, 82),
+    size: const Size(58, 66),
   );
 }
 
@@ -574,23 +576,31 @@ class _GirlPainter extends CustomPainter {
     _drawChickLegs(canvas, w, h, legSwing);
 
     // ===== بدن اصلی جوجه =====
-    // بدن گرد و پف‌آلود
+    // بدن گرد و پف‌آلود با گرادیان بهتر
     final bodyGrad = RadialGradient(
-      center: const Alignment(-0.3, -0.3),
-      radius: 0.8,
-      colors: [const Color(0xFFFFF176), const Color(0xFFFFD600), const Color(0xFFFFC107)],
+      center: const Alignment(-0.25, -0.4),
+      radius: 0.75,
+      colors: [const Color(0xFFFFF9C4), const Color(0xFFFFEA00), const Color(0xFFFF8F00)],
     );
     final bodyRect = Rect.fromLTWH(w * 0.12, h * 0.30, w * 0.65, h * 0.58);
     canvas.drawOval(bodyRect, Paint()..shader = bodyGrad.createShader(bodyRect));
-    // لبه بدن برای عمق
+    // لبه بدن نرم
     canvas.drawOval(bodyRect, Paint()
-      ..color = const Color(0xFFFF8F00).withOpacity(0.35)
+      ..color = const Color(0xFFFFB300).withOpacity(0.45)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0);
+      ..strokeWidth = 2.5);
+    // پرهای بدن — خطوط نرم
+    for (int i = 0; i < 4; i++) {
+      final fy = h * (0.42 + i * 0.10);
+      final fx1 = w * (0.16 + i * 0.02);
+      final fx2 = w * (0.72 - i * 0.02);
+      canvas.drawLine(Offset(fx1, fy), Offset(fx2, fy + 3),
+          Paint()..color = const Color(0xFFFFB300).withOpacity(0.25)..strokeWidth = 1.8);
+    }
     // نور روی بدن
     canvas.drawOval(
-      Rect.fromLTWH(w * 0.18, h * 0.33, w * 0.28, h * 0.20),
-      Paint()..color = Colors.white.withOpacity(0.28),
+      Rect.fromLTWH(w * 0.20, h * 0.32, w * 0.25, h * 0.18),
+      Paint()..color = Colors.white.withOpacity(0.35),
     );
 
     // ===== دم =====
@@ -621,30 +631,31 @@ class _GirlPainter extends CustomPainter {
     // ===== بال — نیم‌رخ، سمت بیرونی =====
     _drawWing(canvas, w, h, wingOpen);
 
-    // ===== سینه سفید =====
+    // ===== سینه سفید کرمی =====
     final bellyPath = Path()
-      ..moveTo(w * 0.42, h * 0.45)
-      ..quadraticBezierTo(w * 0.68, h * 0.48, w * 0.70, h * 0.72)
-      ..quadraticBezierTo(w * 0.55, h * 0.84, w * 0.35, h * 0.80)
-      ..quadraticBezierTo(w * 0.30, h * 0.65, w * 0.42, h * 0.45);
-    canvas.drawPath(bellyPath, Paint()..color = Colors.white.withOpacity(0.82));
+      ..moveTo(w * 0.40, h * 0.43)
+      ..cubicTo(w * 0.65, h * 0.44, w * 0.72, h * 0.56, w * 0.70, h * 0.74)
+      ..cubicTo(w * 0.58, h * 0.86, w * 0.32, h * 0.82, w * 0.28, h * 0.70)
+      ..cubicTo(w * 0.26, h * 0.58, w * 0.30, h * 0.45, w * 0.40, h * 0.43);
+    canvas.drawPath(bellyPath, Paint()..color = const Color(0xFFFFFDE7).withOpacity(0.90));
 
     // ===== سر =====
     final headGrad = RadialGradient(
-      center: const Alignment(-0.2, -0.3),
-      radius: 0.7,
-      colors: [const Color(0xFFFFF9C4), const Color(0xFFFFD600), const Color(0xFFFFC107)],
+      center: const Alignment(-0.2, -0.35),
+      radius: 0.65,
+      colors: [const Color(0xFFFFFDE7), const Color(0xFFFFEA00), const Color(0xFFFFB300)],
     );
     final headRect = Rect.fromLTWH(w * 0.42, h * 0.03, w * 0.52, h * 0.44);
     canvas.drawOval(headRect, Paint()..shader = headGrad.createShader(headRect));
+    // لبه سر
     canvas.drawOval(headRect, Paint()
-      ..color = const Color(0xFFFF8F00).withOpacity(0.3)
+      ..color = const Color(0xFFFF8F00).withOpacity(0.35)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5);
+      ..strokeWidth = 1.8);
     // نور روی سر
     canvas.drawOval(
-      Rect.fromLTWH(w * 0.50, h * 0.05, w * 0.20, h * 0.14),
-      Paint()..color = Colors.white.withOpacity(0.32),
+      Rect.fromLTWH(w * 0.52, h * 0.05, w * 0.18, h * 0.13),
+      Paint()..color = Colors.white.withOpacity(0.38),
     );
 
     // ===== تاج پرها روی سر =====
@@ -652,17 +663,21 @@ class _GirlPainter extends CustomPainter {
 
     // ===== منقار =====
     final beakPath = Path()
-      ..moveTo(w * 0.92, h * 0.20)
-      ..lineTo(w * 1.06, h * 0.26)
-      ..lineTo(w * 0.92, h * 0.32)
+      ..moveTo(w * 0.91, h * 0.19)
+      ..cubicTo(w * 0.98, h * 0.22, w * 1.08, h * 0.25, w * 1.06, h * 0.27)
+      ..cubicTo(w * 1.08, h * 0.29, w * 0.98, h * 0.32, w * 0.91, h * 0.34)
       ..close();
-    canvas.drawPath(beakPath, Paint()..color = const Color(0xFFFF6F00));
+    canvas.drawPath(beakPath, Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [const Color(0xFFFFB300), const Color(0xFFE65100)],
+      ).createShader(Rect.fromLTWH(w * 0.9, h * 0.18, w * 0.2, h * 0.18)));
     // خط وسط منقار
-    canvas.drawLine(
-      Offset(w * 0.92, h * 0.26),
-      Offset(w * 1.04, h * 0.26),
-      Paint()..color = const Color(0xFFE65100).withOpacity(0.7)..strokeWidth = 1.2,
-    );
+    canvas.drawLine(Offset(w * 0.92, h * 0.265), Offset(w * 1.05, h * 0.265),
+        Paint()..color = const Color(0xFFC43E00).withOpacity(0.6)..strokeWidth = 1.3);
+    // سوراخ بینی
+    canvas.drawCircle(Offset(w * 0.94, h * 0.225), 1.5,
+        Paint()..color = const Color(0xFFC43E00).withOpacity(0.7));
 
     // ===== چشم — بزرگ و جذاب =====
     _drawChickEye(canvas, w, h);
