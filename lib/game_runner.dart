@@ -47,8 +47,11 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   double _nextBiomeIn = 18.0;
   double _biomeTransition = 1.0; // 0=transitioning, 1=settled
 
-  static const double _gravity = 1.4;
-  static const double _jumpForce = -24.0;
+  static const double _gravity = 0.85;   // گرانش کمتر = پرش کشیده‌تر
+  static const double _jumpForce = -22.0;
+  // coyote time: چند فریم بعد از لبه هم میشه پرید
+  int _coyoteFrames = 0;
+  static const int _coyoteMax = 6;
 
   final Random _rng = Random();
 
@@ -120,9 +123,17 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   void _gameLoop(Timer timer) {
     if (!_isPlaying || _isDead || !mounted) return;
     setState(() {
-      // پریدن بلافاصله وقتی انگشت روی صفحه‌ست
-      if (_jumpPressed && !_isJumping && _girlJumpOffset <= 0) {
+      // coyote time counter
+      if (_girlJumpOffset <= 0 && !_isJumping) {
+        _coyoteFrames = _coyoteMax;
+      } else if (_coyoteFrames > 0) {
+        _coyoteFrames--;
+      }
+
+      // پریدن — با coyote time و بلافاصله با لمس
+      if (_jumpPressed && _coyoteFrames > 0 && !_isJumping) {
         _isJumping = true;
+        _coyoteFrames = 0;
         _jumpVelocity = _jumpForce;
       }
 
@@ -133,6 +144,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
           _girlJumpOffset = 0;
           _isJumping = false;
           _jumpVelocity = 0;
+          _coyoteFrames = _coyoteMax;
         }
       }
 
@@ -234,21 +246,22 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   }
 
   bool _checkCollision(_Obstacle obs) {
-    const girlLeft = 0.11;
-    const girlRight = 0.21;
-    final obsLeft = obs.x + 0.012;
-    final obsRight = obs.x + 0.075;
+    // هیتباکس بخشنده‌تر — کمی کوچکتر از گرافیک واقعی
+    const girlLeft = 0.125;
+    const girlRight = 0.205;
+    final obsLeft = obs.x + 0.018;
+    final obsRight = obs.x + 0.068;
 
     if (girlRight <= obsLeft || girlLeft >= obsRight) return false;
 
     final isAir = obs.type == ObstacleType.bird || obs.type == ObstacleType.bat || obs.type == ObstacleType.eagle;
     if (isAir) {
-      // پرنده در ارتفاع بالاست — فقط اگه پریده باشه برخورد داره
-      if (_girlJumpOffset < 40) return false; // زیر پرنده
-      if (_girlJumpOffset > 120) return false; // خیلی بالاتر
+      if (_girlJumpOffset < 45) return false;  // زیر پرنده
+      if (_girlJumpOffset > 115) return false; // بالاتر از پرنده
       return true;
     } else {
-      return _girlJumpOffset < 50;
+      // اگه بالای ۵۵ پیکسل پریده باشه از مانع زمینی رد میشه
+      return _girlJumpOffset < 55;
     }
   }
 
@@ -259,9 +272,10 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   void _onPointerDown() {
     _jumpPressed = true;
     if (!_isPlaying) { _startGame(); return; }
-    if (!_isJumping && _girlJumpOffset <= 0 && _isPlaying && !_isDead) {
+    if (!_isDead && _isPlaying && !_isJumping && (_girlJumpOffset <= 0 || _coyoteFrames > 0)) {
       setState(() {
         _isJumping = true;
+        _coyoteFrames = 0;
         _jumpVelocity = _jumpForce;
       });
     }
@@ -513,7 +527,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
 }
 
 // ============================================
-// کاراکتر دختر — گرافیک کامل
+// کاراکتر جوجه — نیم‌رخ، گرافیک کامل
 // ============================================
 class _GirlCharacter extends StatelessWidget {
   final bool isJumping, isDead;
@@ -522,7 +536,7 @@ class _GirlCharacter extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CustomPaint(
     painter: _GirlPainter(isJumping: isJumping, runValue: runValue, hairValue: hairValue, isDead: isDead, speed: speed),
-    size: const Size(60, 90),
+    size: const Size(72, 82),
   );
 }
 
@@ -531,6 +545,8 @@ class _GirlPainter extends CustomPainter {
   final double runValue, hairValue, speed;
   _GirlPainter({required this.isJumping, required this.runValue, required this.hairValue, required this.isDead, required this.speed});
 
+  // ============ نقاشی جوجه — نیم‌رخ ============
+  // جوجه رو به سمت راست (جهت حرکت) نشون میدیم
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
@@ -543,288 +559,253 @@ class _GirlPainter extends CustomPainter {
       canvas.translate(-w / 2, -h / 2);
     }
 
-    final leg = isJumping ? 0.0 : sin(runValue * pi) * 10.0;
-    final armSwing = isJumping ? -12.0 : cos(runValue * pi) * 10.0;
+    // انیمیشن پا — نیم‌رخ: پای جلو و پای عقب
+    final legSwing = isJumping ? -18.0 : sin(runValue * pi) * 14.0;
+    // بال — وقتی میپره بال باز میشه
+    final wingOpen = isJumping ? 1.0 : (sin(runValue * pi * 2).abs() * 0.4);
 
-    // ===== سایه =====
+    // ===== سایه زمین =====
     canvas.drawOval(
-      Rect.fromLTWH(w * 0.08, h * 0.95, w * 0.84, h * 0.05),
-      Paint()..color = Colors.black.withOpacity(0.2),
+      Rect.fromLTWH(w * 0.15, h * 0.96, w * 0.65, h * 0.05),
+      Paint()..color = Colors.black.withOpacity(0.18),
     );
 
-    // ===== پاها با جزئیات =====
-    // ساق چپ
-    final legPaint = Paint()..color = const Color(0xFFFFCC80);
-    _drawRoundedLeg(canvas, Rect.fromLTWH(w * 0.22, h * 0.63 + leg, w * 0.17, h * 0.19), legPaint);
-    // ساق راست
-    _drawRoundedLeg(canvas, Rect.fromLTWH(w * 0.58, h * 0.63 - leg, w * 0.17, h * 0.19), legPaint);
+    // ===== پاهای نیم‌رخ =====
+    _drawChickLegs(canvas, w, h, legSwing);
 
-    // جوراب‌های خطدار
-    _drawStriped(canvas, Rect.fromLTWH(w * 0.23, h * 0.77 + leg, w * 0.15, h * 0.09),
-        const Color(0xFFFFFFFF), const Color(0xFFE91E63));
-    _drawStriped(canvas, Rect.fromLTWH(w * 0.59, h * 0.77 - leg, w * 0.15, h * 0.09),
-        const Color(0xFFFFFFFF), const Color(0xFFE91E63));
-
-    // کفش‌های جزئیات‌دار
-    _drawShoe(canvas, Rect.fromLTWH(w * 0.18, h * 0.84 + leg, w * 0.26, h * 0.12));
-    _drawShoe(canvas, Rect.fromLTWH(w * 0.54, h * 0.84 - leg, w * 0.26, h * 0.12));
-
-    // ===== دامن با چین و چروک =====
-    final skirtPaint = Paint()..color = const Color(0xFFE91E63);
-    final skirtPath = Path()
-      ..moveTo(w * 0.20, h * 0.52)
-      ..cubicTo(w * 0.10, h * 0.60, w * 0.05, h * 0.68, w * 0.10, h * 0.72)
-      ..quadraticBezierTo(w * 0.50, h * 0.78, w * 0.90, h * 0.72)
-      ..cubicTo(w * 0.95, h * 0.68, w * 0.90, h * 0.60, w * 0.80, h * 0.52)
-      ..close();
-    canvas.drawPath(skirtPath, skirtPaint);
-    // چین‌های دامن
-    final foldPaint = Paint()
-      ..color = const Color(0xFFC2185B)
+    // ===== بدن اصلی جوجه =====
+    // بدن گرد و پف‌آلود
+    final bodyGrad = RadialGradient(
+      center: const Alignment(-0.3, -0.3),
+      radius: 0.8,
+      colors: [const Color(0xFFFFF176), const Color(0xFFFFD600), const Color(0xFFFFC107)],
+    );
+    final bodyRect = Rect.fromLTWH(w * 0.12, h * 0.30, w * 0.65, h * 0.58);
+    canvas.drawOval(bodyRect, Paint()..shader = bodyGrad.createShader(bodyRect));
+    // لبه بدن برای عمق
+    canvas.drawOval(bodyRect, Paint()
+      ..color = const Color(0xFFFF8F00).withOpacity(0.35)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8;
-    for (int i = 0; i < 5; i++) {
-      final fold = Path()
-        ..moveTo(w * (0.22 + i * 0.14), h * 0.53)
-        ..quadraticBezierTo(w * (0.18 + i * 0.14), h * 0.68, w * (0.22 + i * 0.14), h * 0.75);
-      canvas.drawPath(fold, foldPaint);
-    }
-    // لبه دامن تزئینی
-    canvas.drawPath(skirtPath, Paint()
-      ..color = const Color(0xFFF48FB1)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5);
+      ..strokeWidth = 2.0);
+    // نور روی بدن
+    canvas.drawOval(
+      Rect.fromLTWH(w * 0.18, h * 0.33, w * 0.28, h * 0.20),
+      Paint()..color = Colors.white.withOpacity(0.28),
+    );
 
-    // ===== بدن (بلوز) =====
-    final bodyPaint = Paint()..color = const Color(0xFFFF80AB);
-    final bodyPath = Path()
-      ..moveTo(w * 0.22, h * 0.52)
-      ..lineTo(w * 0.22, h * 0.34)
-      ..quadraticBezierTo(w * 0.50, h * 0.30, w * 0.78, h * 0.34)
-      ..lineTo(w * 0.78, h * 0.52)
-      ..close();
-    canvas.drawPath(bodyPath, bodyPaint);
-    // خط وسط بلوز
-    canvas.drawLine(Offset(w * 0.50, h * 0.33), Offset(w * 0.50, h * 0.52),
-        Paint()..color = const Color(0xFFC2185B).withOpacity(0.5)..strokeWidth = 1.5);
-    // دکمه‌ها
+    // ===== دم =====
+    final tailFeathers = Paint()..color = const Color(0xFFFFE082);
+    // ۳ پر دم
     for (int i = 0; i < 3; i++) {
-      canvas.drawCircle(Offset(w * 0.50, h * (0.37 + i * 0.05)), w * 0.04,
-          Paint()..color = Colors.white.withOpacity(0.9));
-      canvas.drawCircle(Offset(w * 0.50, h * (0.37 + i * 0.05)), w * 0.025,
-          Paint()..color = const Color(0xFFE91E63).withOpacity(0.7));
+      final tailAngle = (0.2 + i * 0.18) * pi;
+      final tailPath = Path()
+        ..moveTo(w * 0.14, h * 0.55)
+        ..quadraticBezierTo(
+          w * 0.14 - cos(tailAngle) * w * 0.28,
+          h * 0.55 - sin(tailAngle) * h * 0.22,
+          w * 0.14 - cos(tailAngle) * w * 0.40,
+          h * 0.55 - sin(tailAngle) * h * 0.30,
+        );
+      canvas.drawPath(tailPath, tailFeathers
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (8 - i * 1.5)
+        ..strokeCap = StrokeCap.round);
+      // رگه پر
+      canvas.drawPath(tailPath, Paint()
+        ..color = const Color(0xFFFFA000).withOpacity(0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round);
     }
 
-    // ===== کمربند =====
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.20, h * 0.50, w * 0.60, h * 0.045), const Radius.circular(4)),
-      Paint()..color = const Color(0xFF880E4F),
-    );
-    // سگک
-    canvas.drawRect(Rect.fromLTWH(w * 0.44, h * 0.50, w * 0.12, h * 0.045),
-        Paint()..color = const Color(0xFFFFD700));
+    // ===== بال — نیم‌رخ، سمت بیرونی =====
+    _drawWing(canvas, w, h, wingOpen);
 
-    // ===== دست‌ها با آرنج =====
-    final skinPaint = Paint()..color = const Color(0xFFFFB74D);
-    // بازوی چپ
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.05, h * 0.33 + armSwing * 0.5, w * 0.16, h * 0.15), const Radius.circular(7)),
-      skinPaint,
-    );
-    // ساعد چپ
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.04, h * 0.44 + armSwing, w * 0.14, h * 0.14), const Radius.circular(6)),
-      skinPaint,
-    );
-    // مشت چپ
-    _drawFist(canvas, Offset(w * 0.09, h * 0.57 + armSwing), w * 0.10);
+    // ===== سینه سفید =====
+    final bellyPath = Path()
+      ..moveTo(w * 0.42, h * 0.45)
+      ..quadraticBezierTo(w * 0.68, h * 0.48, w * 0.70, h * 0.72)
+      ..quadraticBezierTo(w * 0.55, h * 0.84, w * 0.35, h * 0.80)
+      ..quadraticBezierTo(w * 0.30, h * 0.65, w * 0.42, h * 0.45);
+    canvas.drawPath(bellyPath, Paint()..color = Colors.white.withOpacity(0.82));
 
-    // بازوی راست
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.79, h * 0.33 - armSwing * 0.5, w * 0.16, h * 0.15), const Radius.circular(7)),
-      skinPaint,
+    // ===== سر =====
+    final headGrad = RadialGradient(
+      center: const Alignment(-0.2, -0.3),
+      radius: 0.7,
+      colors: [const Color(0xFFFFF9C4), const Color(0xFFFFD600), const Color(0xFFFFC107)],
     );
-    // ساعد راست
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.82, h * 0.44 - armSwing, w * 0.14, h * 0.14), const Radius.circular(6)),
-      skinPaint,
-    );
-    // مشت راست
-    _drawFist(canvas, Offset(w * 0.91, h * 0.57 - armSwing), w * 0.10);
-
-    // ===== گردن =====
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.40, h * 0.20, w * 0.20, h * 0.16), const Radius.circular(5)),
-      Paint()..color = const Color(0xFFFFCC80),
-    );
-
-    // ===== موهای پشت (قبل از صورت) =====
-    final hairPaint = Paint()..color = const Color(0xFFFFD700);
-    final hairDark = Paint()..color = const Color(0xFFFFB300);
-
-    // دنبالچه پشت (در حال حرکت)
-    final ponytailSwing = sin(hairValue * pi) * 8.0;
-    final ponytailPath = Path()
-      ..moveTo(w * 0.72, h * 0.08)
-      ..cubicTo(w * 0.90, h * 0.12 + ponytailSwing, w * 0.95, h * 0.28 + ponytailSwing, w * 0.85, h * 0.38 + ponytailSwing * 0.5);
-    canvas.drawPath(ponytailPath, Paint()
-      ..color = const Color(0xFFFFD700)
+    final headRect = Rect.fromLTWH(w * 0.42, h * 0.03, w * 0.52, h * 0.44);
+    canvas.drawOval(headRect, Paint()..shader = headGrad.createShader(headRect));
+    canvas.drawOval(headRect, Paint()
+      ..color = const Color(0xFFFF8F00).withOpacity(0.3)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round);
-    // رگه‌های موی دنبالچه
-    canvas.drawPath(ponytailPath, Paint()
-      ..color = const Color(0xFFFFF9C4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round);
+      ..strokeWidth = 1.5);
+    // نور روی سر
+    canvas.drawOval(
+      Rect.fromLTWH(w * 0.50, h * 0.05, w * 0.20, h * 0.14),
+      Paint()..color = Colors.white.withOpacity(0.32),
+    );
 
-    // ===== صورت =====
-    // پایه صورت
-    canvas.drawOval(Rect.fromLTWH(w * 0.18, h * 0.02, w * 0.64, h * 0.26), Paint()..color = const Color(0xFFFFCC80));
+    // ===== تاج پرها روی سر =====
+    _drawCrown(canvas, w, h);
 
-    // سایه جانبی صورت (حجم)
-    canvas.drawOval(Rect.fromLTWH(w * 0.18, h * 0.08, w * 0.12, h * 0.16),
-        Paint()..color = const Color(0xFFFFB74D).withOpacity(0.5));
+    // ===== منقار =====
+    final beakPath = Path()
+      ..moveTo(w * 0.92, h * 0.20)
+      ..lineTo(w * 1.06, h * 0.26)
+      ..lineTo(w * 0.92, h * 0.32)
+      ..close();
+    canvas.drawPath(beakPath, Paint()..color = const Color(0xFFFF6F00));
+    // خط وسط منقار
+    canvas.drawLine(
+      Offset(w * 0.92, h * 0.26),
+      Offset(w * 1.04, h * 0.26),
+      Paint()..color = const Color(0xFFE65100).withOpacity(0.7)..strokeWidth = 1.2,
+    );
 
-    // گوش‌ها
-    canvas.drawOval(Rect.fromLTWH(w * 0.14, h * 0.10, w * 0.10, h * 0.14), Paint()..color = const Color(0xFFFFCC80));
-    canvas.drawOval(Rect.fromLTWH(w * 0.76, h * 0.10, w * 0.10, h * 0.14), Paint()..color = const Color(0xFFFFCC80));
-    // داخل گوش
-    canvas.drawOval(Rect.fromLTWH(w * 0.16, h * 0.12, w * 0.06, h * 0.09), Paint()..color = const Color(0xFFFFB74D).withOpacity(0.6));
+    // ===== چشم — بزرگ و جذاب =====
+    _drawChickEye(canvas, w, h);
 
-    // ===== موهای روی سر =====
-    // توده اصلی موها
-    canvas.drawOval(Rect.fromLTWH(w * 0.14, h * -0.02, w * 0.72, h * 0.18), hairPaint);
-    // فرهای روی سر
-    for (int i = 0; i < 7; i++) {
-      canvas.drawCircle(
-        Offset(w * (0.13 + i * 0.12), h * (0.00 + sin(i * 1.3) * 0.03)),
-        w * (0.09 + sin(i * 0.7) * 0.02),
-        hairPaint,
-      );
-    }
-    // رگه‌های مو
-    for (int i = 0; i < 5; i++) {
-      canvas.drawLine(
-        Offset(w * (0.25 + i * 0.10), h * -0.01),
-        Offset(w * (0.22 + i * 0.10), h * 0.10),
-        Paint()..color = const Color(0xFFFFF9C4).withOpacity(0.6)..strokeWidth = 1.5,
-      );
-    }
-    // موهای کنار صورت
-    canvas.drawOval(Rect.fromLTWH(w * 0.11, h * 0.05, w * 0.12, h * 0.18), hairDark);
-    canvas.drawOval(Rect.fromLTWH(w * 0.77, h * 0.05, w * 0.12, h * 0.18), hairDark);
-
-    // ===== ابروها =====
-    final browPaint = Paint()..color = const Color(0xFFFFB300)..strokeWidth = 2.2..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.30, h * 0.09), Offset(w * 0.42, h * 0.07), browPaint);
-    canvas.drawLine(Offset(w * 0.58, h * 0.07), Offset(w * 0.70, h * 0.09), browPaint);
-
-    // ===== چشم‌ها =====
-    // سایه چشم
-    canvas.drawOval(Rect.fromLTWH(w * 0.28, h * 0.10, w * 0.16, h * 0.10),
-        Paint()..color = const Color(0xFF7B1FA2).withOpacity(0.25));
-    canvas.drawOval(Rect.fromLTWH(w * 0.56, h * 0.10, w * 0.16, h * 0.10),
-        Paint()..color = const Color(0xFF7B1FA2).withOpacity(0.25));
-
-    // سفیدی
-    canvas.drawOval(Rect.fromLTWH(w * 0.29, h * 0.10, w * 0.15, h * 0.10), Paint()..color = Colors.white);
-    canvas.drawOval(Rect.fromLTWH(w * 0.56, h * 0.10, w * 0.15, h * 0.10), Paint()..color = Colors.white);
-
-    // مردمک
-    canvas.drawCircle(Offset(w * 0.37, h * 0.145), w * 0.048, Paint()..color = const Color(0xFF1A237E));
-    canvas.drawCircle(Offset(w * 0.63, h * 0.145), w * 0.048, Paint()..color = const Color(0xFF1A237E));
-    // درخشش
-    canvas.drawCircle(Offset(w * 0.36, h * 0.135), w * 0.022, Paint()..color = Colors.white.withOpacity(0.9));
-    canvas.drawCircle(Offset(w * 0.62, h * 0.135), w * 0.022, Paint()..color = Colors.white.withOpacity(0.9));
-    // مردمک مشکی
-    canvas.drawCircle(Offset(w * 0.37, h * 0.148), w * 0.028, Paint()..color = Colors.black87);
-    canvas.drawCircle(Offset(w * 0.63, h * 0.148), w * 0.028, Paint()..color = Colors.black87);
-    // نقطه درخشش
-    canvas.drawCircle(Offset(w * 0.36, h * 0.138), w * 0.010, Paint()..color = Colors.white);
-    canvas.drawCircle(Offset(w * 0.62, h * 0.138), w * 0.010, Paint()..color = Colors.white);
-
-    // مژه‌های بالا
-    final lash = Paint()..color = Colors.black..strokeWidth = 1.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
-    for (int i = 0; i < 4; i++) {
-      canvas.drawLine(
-        Offset(w * (0.30 + i * 0.035), h * 0.10),
-        Offset(w * (0.285 + i * 0.035), h * 0.065),
-        lash,
-      );
-      canvas.drawLine(
-        Offset(w * (0.57 + i * 0.035), h * 0.10),
-        Offset(w * (0.555 + i * 0.035), h * 0.065),
-        lash,
-      );
-    }
-
-    // گونه‌های صورتی گرادیانی
-    final blushPaint = Paint()..color = Colors.pink.withOpacity(0.38);
-    canvas.drawCircle(Offset(w * 0.27, h * 0.19), w * 0.09, blushPaint);
-    canvas.drawCircle(Offset(w * 0.73, h * 0.19), w * 0.09, blushPaint);
-
-    // بینی کوچک
-    canvas.drawOval(Rect.fromLTWH(w * 0.46, h * 0.16, w * 0.08, h * 0.05),
-        Paint()..color = const Color(0xFFFFB74D).withOpacity(0.7));
-
-    // لبخند با دندون
-    canvas.drawArc(Rect.fromLTWH(w * 0.36, h * 0.18, w * 0.28, h * 0.08), 0, pi, false,
-        Paint()..color = const Color(0xFFE57373)..style = PaintingStyle.stroke..strokeWidth = 2.0);
-    // دندون
-    canvas.drawRect(Rect.fromLTWH(w * 0.38, h * 0.18, w * 0.24, h * 0.025),
-        Paint()..color = Colors.white.withOpacity(0.85));
+    // ===== گونه صورتی =====
+    canvas.drawCircle(
+      Offset(w * 0.82, h * 0.30),
+      w * 0.07,
+      Paint()..color = const Color(0xFFFF80AB).withOpacity(0.55),
+    );
 
     if (isDead) canvas.restore();
   }
 
-  void _drawRoundedLeg(Canvas canvas, Rect rect, Paint paint) {
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(6)), paint);
-    // خط روشن روی ساق
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(rect.left + 2, rect.top + 2, rect.width * 0.35, rect.height - 4), const Radius.circular(4)),
-      Paint()..color = Colors.white.withOpacity(0.18),
+  void _drawChickLegs(Canvas canvas, double w, double h, double legSwing) {
+    final legColor = const Color(0xFFFF8F00);
+    final toeColor = const Color(0xFFE65100);
+    final lp = Paint()..color = legColor..strokeWidth = 4.5..strokeCap = StrokeCap.round;
+    final tp = Paint()..color = toeColor..strokeWidth = 3.0..strokeCap = StrokeCap.round;
+
+    // پای جلو (جلوتر)
+    final f1x = w * 0.58;
+    final f1y = h * 0.82;
+    canvas.drawLine(Offset(f1x, f1y), Offset(f1x + legSwing * 0.5, h * 0.97), lp);
+    // انگشت جلو
+    canvas.drawLine(Offset(f1x + legSwing * 0.5, h * 0.97), Offset(f1x + legSwing * 0.5 + 14, h * 0.97), tp);
+    // انگشت عقب (کوچک)
+    canvas.drawLine(Offset(f1x + legSwing * 0.5, h * 0.97), Offset(f1x + legSwing * 0.5 - 7, h * 0.97 + 3), tp);
+
+    // پای عقب
+    final b1x = w * 0.38;
+    final b1y = h * 0.84;
+    canvas.drawLine(Offset(b1x, b1y), Offset(b1x - legSwing * 0.5, h * 0.97), lp..color = legColor.withOpacity(0.75));
+    // انگشت
+    canvas.drawLine(Offset(b1x - legSwing * 0.5, h * 0.97), Offset(b1x - legSwing * 0.5 + 13, h * 0.97), tp..color = toeColor.withOpacity(0.75));
+    canvas.drawLine(Offset(b1x - legSwing * 0.5, h * 0.97), Offset(b1x - legSwing * 0.5 - 6, h * 0.97 + 3), tp..color = toeColor.withOpacity(0.75));
+  }
+
+  void _drawWing(Canvas canvas, double w, double h, double open) {
+    // بال نیم‌رخ — از بدن به سمت پایین‌جلو باز میشه
+    final wingBase = Offset(w * 0.42, h * 0.48);
+    final wingTip = Offset(
+      w * 0.20 - open * w * 0.14,
+      h * (0.55 + open * 0.25),
     );
-  }
+    final wingMid = Offset(w * 0.22, h * 0.42);
 
-  void _drawStriped(Canvas canvas, Rect rect, Color c1, Color c2) {
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), Paint()..color = c1);
+    final wingPath = Path()
+      ..moveTo(wingBase.dx, wingBase.dy)
+      ..quadraticBezierTo(wingMid.dx, wingMid.dy, wingTip.dx, wingTip.dy)
+      ..quadraticBezierTo(w * 0.30, h * 0.72, wingBase.dx, wingBase.dy);
+    canvas.drawPath(wingPath, Paint()..color = const Color(0xFFFFCA28));
+    canvas.drawPath(wingPath, Paint()
+      ..color = const Color(0xFFFF8F00).withOpacity(0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5);
+
+    // پرهای بال
     for (int i = 0; i < 3; i++) {
-      canvas.drawRect(Rect.fromLTWH(rect.left, rect.top + i * rect.height / 3, rect.width, rect.height / 6),
-          Paint()..color = c2.withOpacity(0.6));
-    }
-  }
-
-  void _drawShoe(Canvas canvas, Rect rect) {
-    // بدنه کفش
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(6)), Paint()..color = const Color(0xFF4E342E));
-    // نوک کفش
-    canvas.drawOval(Rect.fromLTWH(rect.right - rect.width * 0.35, rect.top + 1, rect.width * 0.38, rect.height - 2),
-        Paint()..color = const Color(0xFF3E2723));
-    // بند کفش
-    canvas.drawLine(Offset(rect.left + 4, rect.top + rect.height * 0.4), Offset(rect.right - 6, rect.top + rect.height * 0.4),
-        Paint()..color = Colors.white.withOpacity(0.5)..strokeWidth = 1.2);
-    // درخشش
-    canvas.drawOval(Rect.fromLTWH(rect.left + 3, rect.top + 2, rect.width * 0.3, rect.height * 0.3),
-        Paint()..color = Colors.white.withOpacity(0.15));
-  }
-
-  void _drawFist(Canvas canvas, Offset center, double r) {
-    canvas.drawCircle(center, r, Paint()..color = const Color(0xFFFFB74D));
-    // انگشتان
-    for (int i = 0; i < 3; i++) {
+      final t = (i + 1) / 4.0;
+      final px = wingBase.dx + (wingTip.dx - wingBase.dx) * t;
+      final py = wingBase.dy + (wingTip.dy - wingBase.dy) * t;
       canvas.drawLine(
-        Offset(center.dx - r * 0.4 + i * r * 0.4, center.dy - r * 0.7),
-        Offset(center.dx - r * 0.4 + i * r * 0.4, center.dy - r * 1.1),
-        Paint()..color = const Color(0xFFFFCC80)..strokeWidth = 3..strokeCap = StrokeCap.round,
+        Offset(px, py),
+        Offset(px + 6, py + 10 + open * 6),
+        Paint()..color = const Color(0xFFFFA000).withOpacity(0.7)..strokeWidth = 2.5..strokeCap = StrokeCap.round,
       );
     }
   }
 
+  void _drawCrown(Canvas canvas, double w, double h) {
+    // ۵ پر تاجی روی سر
+    final crownBase = Offset(w * 0.68, h * 0.06);
+    final featherAngles = [-0.5 * pi, -0.55 * pi, -0.45 * pi, -0.60 * pi, -0.40 * pi];
+    final featherLens = [22.0, 18.0, 20.0, 14.0, 14.0];
+    final featherColors = [
+      const Color(0xFFFFD600),
+      const Color(0xFFFF6D00),
+      const Color(0xFFFFD600),
+      const Color(0xFFFF6D00),
+      const Color(0xFFFF8F00),
+    ];
+    for (int i = 0; i < 5; i++) {
+      final angle = featherAngles[i];
+      final len = featherLens[i];
+      final tip = Offset(crownBase.dx + cos(angle) * len, crownBase.dy + sin(angle) * len);
+      canvas.drawLine(crownBase, tip,
+          Paint()..color = featherColors[i]..strokeWidth = 5.5..strokeCap = StrokeCap.round);
+      // نوک پر
+      canvas.drawCircle(tip, 3.5, Paint()..color = featherColors[(i + 1) % featherColors.length]);
+    }
+  }
+
+  void _drawChickEye(Canvas canvas, double w, double h) {
+    final eyeCenter = Offset(w * 0.84, h * 0.17);
+
+    // سایه پشت چشم
+    canvas.drawCircle(eyeCenter, w * 0.115, Paint()..color = Colors.black.withOpacity(0.15));
+
+    // سفیدی
+    canvas.drawCircle(eyeCenter, w * 0.105, Paint()..color = Colors.white);
+
+    // عنبیه — آبی تیره براق
+    canvas.drawCircle(eyeCenter, w * 0.075, Paint()..color = const Color(0xFF1A237E));
+
+    // مردمک
+    canvas.drawCircle(eyeCenter, w * 0.046, Paint()..color = Colors.black);
+
+    // درخشش بزرگ
+    canvas.drawCircle(
+      Offset(eyeCenter.dx - w * 0.025, eyeCenter.dy - w * 0.025),
+      w * 0.025,
+      Paint()..color = Colors.white.withOpacity(0.95),
+    );
+    // درخشش کوچک
+    canvas.drawCircle(
+      Offset(eyeCenter.dx + w * 0.018, eyeCenter.dy + w * 0.010),
+      w * 0.010,
+      Paint()..color = Colors.white.withOpacity(0.7),
+    );
+
+    // مژه بالا
+    final lash = Paint()..color = Colors.black87..strokeWidth = 1.8..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+    for (int i = 0; i < 4; i++) {
+      final angle = -pi * 0.75 + i * 0.18;
+      canvas.drawLine(
+        Offset(eyeCenter.dx + cos(angle) * w * 0.10, eyeCenter.dy + sin(angle) * w * 0.10),
+        Offset(eyeCenter.dx + cos(angle) * w * 0.15, eyeCenter.dy + sin(angle) * w * 0.15),
+        lash,
+      );
+    }
+
+    // ابرو کوچک
+    canvas.drawLine(
+      Offset(eyeCenter.dx - w * 0.07, eyeCenter.dy - w * 0.11),
+      Offset(eyeCenter.dx + w * 0.05, eyeCenter.dy - w * 0.13),
+      Paint()..color = const Color(0xFFFFA000)..strokeWidth = 2.5..strokeCap = StrokeCap.round,
+    );
+  }
+
   @override
   bool shouldRepaint(_GirlPainter old) =>
-      old.isJumping != isJumping || old.runValue != runValue || old.hairValue != hairValue || old.isDead != isDead;
+      old.isJumping != isJumping || old.runValue != runValue || old.isDead != isDead;
 }
 
 // ============================================

@@ -391,7 +391,7 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   ),
                   const SizedBox(height: 16),
                   _GameCard(
-                    title: 'دختر دونده',
+                    title: 'جوجو دونده',
                     description: 'بپر از روی موانع و امتیاز بگیر!',
                     icon: '🏃‍♀️',
                     color: Colors.purple,
