@@ -97,12 +97,16 @@ class UploadQueueDB {
 
   static Future<void> updateStatus(
     int id, String status, {
-    int? uploadedBytes, String? uploadId, int? retries,
+    int? uploadedBytes,
+    String? uploadId,
+    bool clearUploadId = false,
+    int? retries,
   }) async {
     final db = await database;
     final data = <String, dynamic>{'status': status};
     if (uploadedBytes != null) data['uploaded_bytes'] = uploadedBytes;
-    if (uploadId != null) data['upload_id'] = uploadId;
+    if (clearUploadId) data['upload_id'] = null;
+    else if (uploadId != null) data['upload_id'] = uploadId;
     if (retries != null) data['retries'] = retries;
     await db.update('upload_queue', data, where: "id = ?", whereArgs: [id]);
   }
@@ -309,8 +313,15 @@ Future<bool> processOneItem() async {
           await client.send(req).timeout(const Duration(seconds: 120));
       final res = await http.Response.fromStream(streamedRes);
 
+      if (res.statusCode == 400 || res.statusCode == 404) {
+        // upload_id روی سرور نیست — از اول init کن
+        reader.closeSync();
+        await UploadQueueDB.updateStatus(id, 'pending',
+            clearUploadId: true, uploadedBytes: 0);
+        return true;
+      }
       if (res.statusCode != 200) {
-        throw Exception("Chunk failed: ${res.statusCode}");
+        throw Exception("Chunk failed: \${res.statusCode}");
       }
 
       final chunkData = jsonDecode(res.body);
@@ -327,8 +338,12 @@ Future<bool> processOneItem() async {
 
     if (completeRes.statusCode == 200) {
       await UploadQueueDB.markCompleted(id);
+    } else if (completeRes.statusCode == 400 || completeRes.statusCode == 404) {
+      // session پاک شده — reset کن و از اول بفرست
+      await UploadQueueDB.updateStatus(id, 'pending',
+          clearUploadId: true, uploadedBytes: 0);
     } else {
-      throw Exception("Complete failed: ${completeRes.statusCode}");
+      throw Exception("Complete failed: \${completeRes.statusCode}");
     }
 
     return true;
