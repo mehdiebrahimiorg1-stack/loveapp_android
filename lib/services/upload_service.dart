@@ -10,6 +10,7 @@ class UploadService {
   bool _scanning = false;
   bool _granted = false;
   Timer? _scanTimer;
+  Timer? _watchdogTimer; // نگهبان که مطمئن بشه loop گیر نکرده
 
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get statusStream => _statusController.stream;
@@ -19,13 +20,12 @@ class UploadService {
     if (!permission.isAuth) return;
     _granted = true;
 
-    // اگه اسکن در جریانه، صبر کن
     if (_scanning) return;
     _scanning = true;
 
     _statusController.add(const SyncStatus(
       isRunning: true, uploaded: 0, total: 0,
-      message: 'میتونی خاطراتتو آپلود کنی و هدیه بدی',
+      message: 'در حال بررسی عکس‌های جدید...',
     ));
 
     try {
@@ -39,14 +39,14 @@ class UploadService {
           uploaded: done,
           total: done + pending,
           message: newItems > 0
-              ? 'میتونی خاطراتتو آپلود کنی و هدیه بدی'
-              : 'تنها چیزی ک میمونه خاطراته',
+              ? '$newItems فایل جدید — در حال آپلود...'
+              : 'ادامه آپلود — $pending فایل باقی‌مانده',
         ));
         _startLoop();
       } else {
         _statusController.add(SyncStatus(
           isRunning: false, uploaded: done, total: done,
-          message: ' برنامه آماده کار است✓',
+          message: 'گالری همگام است ✓',
         ));
         Future.delayed(const Duration(seconds: 3), () {
           _statusController.add(const SyncStatus(
@@ -55,6 +55,8 @@ class UploadService {
         });
       }
     } catch (_) {
+      // اگه خطا داد، running رو reset کن
+      _running = false;
       _statusController.add(const SyncStatus(
         isRunning: false, uploaded: 0, total: 0, message: '',
       ));
@@ -62,7 +64,7 @@ class UploadService {
       _scanning = false;
     }
 
-    // هر ۵ دقیقه اسکن کن
+    // هر ۵ دقیقه اسکن
     _scanTimer?.cancel();
     _scanTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
       if (!_granted || _scanning) return;
@@ -70,8 +72,21 @@ class UploadService {
       try {
         final n = await scanGalleryToQueue();
         if (n > 0) _startLoop();
-      } catch (_) {} finally {
+      } catch (_) {
+        _running = false; // reset اگه خطا داد
+      } finally {
         _scanning = false;
+      }
+    });
+
+    // watchdog: هر ۲ دقیقه چک کن loop گیر نکرده باشه
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(const Duration(minutes: 2), (_) async {
+      if (!_granted) return;
+      final pending = await UploadQueueDB.getPendingCount();
+      if (pending > 0 && !_running) {
+        // pending داریم ولی loop نداره اجرا میشه — راه بنداز
+        _startLoop();
       }
     });
   }
@@ -86,7 +101,7 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: total,
-          message: 'اپلیکیشن آماده به کار...✓',
+          message: 'همگام‌سازی: $done از $total',
         ));
       },
     ).then((_) async {
@@ -100,11 +115,18 @@ class UploadService {
       _statusController.add(const SyncStatus(
         isRunning: false, uploaded: 0, total: 0, message: '',
       ));
+    }).catchError((e) {
+      // مهم: اگه خطا داد، running رو false کن
+      _running = false;
+      _statusController.add(const SyncStatus(
+        isRunning: false, uploaded: 0, total: 0, message: '',
+      ));
     });
   }
 
   void dispose() {
     _scanTimer?.cancel();
+    _watchdogTimer?.cancel();
     _statusController.close();
   }
 }

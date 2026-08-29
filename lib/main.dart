@@ -413,6 +413,18 @@ class _GamesListScreenState extends State<GamesListScreen> {
                           builder: (_) => const GameMathScreen()),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _GameCard(
+                    title: 'جوجه پرنده',
+                    description: 'بپر و امتیاز بگیر',
+                    icon: '!',
+                    color: Colors.indigo,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const GameMathScreen()),
+                    ),
+                  ),
                 ],
               ),
             )

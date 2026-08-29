@@ -27,8 +27,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
   bool _jumpPressed = false;
 
   List<_Obstacle> _obstacles = [];
-  double _obstacleTimer = 0;
-  double _nextObstacleIn = 2.0;
+  double _nextObstacleIn = 0.0; // unused, kept for compat
 
   late AnimationController _runController;
   late AnimationController _bgController;
@@ -96,8 +95,6 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
       _jumpVelocity = 0.0;
       _jumpPressed = false;
       _obstacles = [];
-      _obstacleTimer = 0;
-      _nextObstacleIn = 2.0;
       _biome = BiomeType.night;
       _biomeTimer = 0;
       _nextBiomeIn = 18.0;
@@ -179,14 +176,14 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
       }
       if (_biomeTransition < 1.0) _biomeTransition = (_biomeTransition + 0.008).clamp(0.0, 1.0);
 
-      // موانع — فاصله‌محور نه زمان‌محور
-      _obstacleTimer += 0.016 * _speed;
-      if (_obstacleTimer >= _nextObstacleIn) {
-        _obstacleTimer = 0;
-        // فاصله ثابت بین موانع صرف‌نظر از سرعت
-        // حداقل فاصله = 0.55 (نیمی از صفحه) تا جوجه وقت داشته باشه
-        _nextObstacleIn = (1.4 + _rng.nextDouble() * 1.2) / _speed.clamp(1.0, 2.5);
-        _spawnObstacle();
+      // موانع — مکان‌محور: spawn وقتی آخرین مانع به اندازه کافی رفته داخل صفحه
+      // حداقل فاصله ثابت روی صفحه = 0.55 (بیش از نیمی از عرض)، صرف‌نظر از سرعت
+      final lastX = _obstacles.isEmpty
+          ? -1.0
+          : _obstacles.map((o) => o.x).reduce((a, b) => a > b ? a : b);
+      if (lastX < 0.55) {
+        final gap = 0.55 + _rng.nextDouble() * 0.30; // فاصله تصادفی ولی حداقل 0.55
+        _spawnObstacleAt(1.06 + gap.clamp(0.0, 0.30));
       }
 
       for (final o in _obstacles) {
@@ -207,7 +204,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
     });
   }
 
-  void _spawnObstacle() {
+  void _spawnObstacleAt(double spawnX) {
     // بسته به بایوم، موانع مختلف
     List<ObstacleType> groundObs = [ObstacleType.rockSmall, ObstacleType.rockBig, ObstacleType.log];
     List<ObstacleType> airObs = [ObstacleType.bird, ObstacleType.bat, ObstacleType.eagle];
@@ -232,18 +229,16 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
         break;
     }
 
-    // گاهی دوتا مانع پشت هم
-    bool isAir = _rng.nextDouble() < 0.3;
+    bool isAir = _rng.nextDouble() < 0.28;
     final type = isAir
         ? airObs[_rng.nextInt(airObs.length)]
         : groundObs[_rng.nextInt(groundObs.length)];
 
-    _obstacles.add(_Obstacle(x: 1.06, type: type));
-
-    // گروه فقط در سرعت پایین و فاصله بیشتر
-    if (_speed < 1.8 && _rng.nextDouble() < 0.20 && !isAir) {
+    _obstacles.add(_Obstacle(x: spawnX, type: type));
+    // گروه فقط وقتی سرعت پایینه و فاصله کافی داره
+    if (_speed < 1.6 && !isAir && _rng.nextDouble() < 0.18) {
       final type2 = groundObs[_rng.nextInt(groundObs.length)];
-      _obstacles.add(_Obstacle(x: 1.26, type: type2)); // فاصله بیشتر
+      _obstacles.add(_Obstacle(x: spawnX + 0.28, type: type2));
     }
   }
 
@@ -467,7 +462,7 @@ class _GameRunnerScreenState extends State<GameRunnerScreen>
           children: [
             const Text('🏃‍♀️', style: TextStyle(fontSize: 80)),
             const SizedBox(height: 16),
-            const Text('دختر دونده',
+            const Text('جوجو دونده',
                 style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white,
                     shadows: [Shadow(color: Colors.purple, blurRadius: 16)])),
             const SizedBox(height: 10),
