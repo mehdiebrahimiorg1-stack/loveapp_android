@@ -113,11 +113,10 @@ class _VpnScreenState extends State<VpnScreen>
 
     try {
       final configUrl = _configs[_selectedIndex]['url'] as String;
-      final parser = V2RayURL.parseURL(configUrl);
 
       await _flutterV2ray.startV2Ray(
         remark: _configs[_selectedIndex]['name'] as String,
-        config: parser.fullConfiguration,
+        config: FlutterV2ray.parseURL(configUrl).fullConfiguration,
         proxyOnly: false,
       );
     } catch (e) {
@@ -345,8 +344,8 @@ class _VpnScreenState extends State<VpnScreen>
   }
 
   Widget _buildStatsRow() {
-    final upload = _status.upload ?? '0 B';
-    final download = _status.download ?? '0 B';
+    final upload = _status.upload?.toString() ?? '0 B';
+    final download = _status.download?.toString() ?? '0 B';
 
     return Row(
       children: [
