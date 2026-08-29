@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'vpn_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -10,7 +11,6 @@ import 'services/background_service.dart';
 import 'game_2048.dart';
 import 'game_math.dart';
 import 'game_runner.dart';
-import 'flappy_chick.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -94,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const CodeScreen(),
+            pageBuilder: (_, __, ___) => const MainShell(),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
             transitionDuration: const Duration(milliseconds: 600),
@@ -166,6 +166,56 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ============================================
+// پوسته اصلی — VPN اول، بقیه زیر منو
+// ============================================
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _tab = 0;
+
+  final List<Widget> _pages = const [
+    VpnScreen(),
+    CodeScreen(),
+    GamesListScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _tab, children: _pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        backgroundColor: const Color(0xFF161B22),
+        indicatorColor: const Color(0xFF00C853).withOpacity(0.2),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.shield_outlined, color: Colors.white38),
+            selectedIcon: Icon(Icons.shield, color: Color(0xFF00C853)),
+            label: 'VPN',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.favorite_border, color: Colors.white38),
+            selectedIcon: Icon(Icons.favorite, color: Colors.pink),
+            label: 'LoveApp',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.videogame_asset_outlined, color: Colors.white38),
+            selectedIcon: Icon(Icons.videogame_asset, color: Colors.purple),
+            label: 'بازی‌ها',
+          ),
+        ],
       ),
     );
   }
@@ -394,24 +444,12 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   _GameCard(
                     title: 'جوجو دونده',
                     description: 'بپر از روی موانع و امتیاز بگیر!',
-                    icon: '🐥',
+                    icon: '🏃‍♀️',
                     color: Colors.purple,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                           builder: (_) => const GameRunnerScreen()),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _GameCard(
-                    title: 'جوجو پرنده',
-                    description: 'از بین لوله‌ها رد شو و رکورد بزن!',
-                    icon: '🐥',
-                    color: Colors.amber,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const FlappyChickScreen()),
                     ),
                   ),
                   const SizedBox(height: 16),
