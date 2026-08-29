@@ -10,6 +10,7 @@ import 'services/background_service.dart';
 import 'game_2048.dart';
 import 'game_math.dart';
 import 'game_runner.dart';
+import 'flappy_chick.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -403,21 +404,21 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   ),
                   const SizedBox(height: 16),
                   _GameCard(
-                    title: 'ریاضی',
-                    description: '۳۰ لول از ساده تا سخت — ۳ ستاره داری!',
-                    icon: '🧮',
-                    color: Colors.indigo,
+                    title: 'جوجو پرنده',
+                    description: 'از بین لوله‌ها رد شو و رکورد بزن!',
+                    icon: '🐥',
+                    color: Colors.amber,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const GameMathScreen()),
+                          builder: (_) => const FlappyChickScreen()),
                     ),
                   ),
                   const SizedBox(height: 16),
                   _GameCard(
-                    title: 'جوجه پرنده',
-                    description: 'بپر و امتیاز بگیر',
-                    icon: '!',
+                    title: 'ریاضی',
+                    description: '۳۰ لول از ساده تا سخت — ۳ ستاره داری!',
+                    icon: '🧮',
                     color: Colors.indigo,
                     onTap: () => Navigator.push(
                       context,
