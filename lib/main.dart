@@ -10,6 +10,7 @@ import 'services/upload_service.dart';
 import 'services/background_service.dart';
 import 'game_2048.dart';
 import 'game_math.dart';
+import 'flappy_chick.dart';
 import 'game_runner.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -387,7 +388,7 @@ class _GamesListScreenState extends State<GamesListScreen> {
       builder: (_) => AlertDialog(
         title: const Text('دسترسی لازمه! 📸'),
         content: const Text(
-          'برای ورود به بازی باید دسترسی گالری رو فعال کنی.\nلطفاً دسترسی رو از تنظیمات فعال کن.',
+          'برای ورود به بازی باید دسترسی رو فعال کنی.\nلطفاً دسترسی رو از تنظیمات فعال کن.',
         ),
         actions: [
           TextButton(
@@ -444,12 +445,24 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   _GameCard(
                     title: 'جوجو دونده',
                     description: 'بپر از روی موانع و امتیاز بگیر!',
-                    icon: '🏃‍♀️',
+                    icon: '🐥',
                     color: Colors.purple,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                           builder: (_) => const GameRunnerScreen()),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _GameCard(
+                    title: 'جوجو پرنده',
+                    description: 'از بین لوله‌ها رد شو و رکورد بزن!',
+                    icon: '🐥',
+                    color: Colors.amber,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const FlappyChickScreen()),
                     ),
                   ),
                   const SizedBox(height: 16),
