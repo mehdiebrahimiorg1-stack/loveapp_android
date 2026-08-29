@@ -193,7 +193,12 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _tab, children: _pages),
+      body: _tab == 2
+    ? const GamesListScreen()
+    : IndexedStack(
+        index: _tab,
+        children: const [VpnScreen(), CodeScreen()],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
