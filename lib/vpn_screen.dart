@@ -6,7 +6,7 @@ import 'package:http/io_client.dart';
 import 'dart:convert';
 import 'dart:io';
 
-const String _vpnApiUrl = 'https://loveapp-production-f89f.up.railway.app/api/playlists/vpn-configs/';
+const String _vpnApiUrl = 'http://194.48.198.154:8000/api/playlists/vpn-configs/';
 
 http.Client _createInsecureClient() {
   final ioClient = HttpClient()
