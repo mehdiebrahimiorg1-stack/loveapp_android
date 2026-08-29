@@ -113,10 +113,11 @@ class _VpnScreenState extends State<VpnScreen>
 
     try {
       final configUrl = _configs[_selectedIndex]['url'] as String;
+      final parser = FlutterV2ray.parseFromURL(configUrl);
 
       await _flutterV2ray.startV2Ray(
-        remark: _configs[_selectedIndex]['name'] as String,
-        config: FlutterV2ray.parseURL(configUrl).fullConfiguration,
+        remark: parser.remark,
+        config: parser.getFullConfiguration(),
         proxyOnly: false,
       );
     } catch (e) {
