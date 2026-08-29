@@ -19,7 +19,7 @@ class UploadService {
     final permission = await PhotoManager.requestPermissionExtend();
     if (!permission.isAuth) return;
     _granted = true;
-
+    _running = false;
     if (_scanning) return;
     _scanning = true;
 
