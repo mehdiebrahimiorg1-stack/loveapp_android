@@ -394,7 +394,7 @@ class _GamesListScreenState extends State<GamesListScreen> {
                   _GameCard(
                     title: 'جوجو دونده',
                     description: 'بپر از روی موانع و امتیاز بگیر!',
-                    icon: '🏃‍♀️',
+                    icon: '🐥',
                     color: Colors.purple,
                     onTap: () => Navigator.push(
                       context,

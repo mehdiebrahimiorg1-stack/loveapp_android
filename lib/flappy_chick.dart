@@ -27,8 +27,8 @@ class _FlappyChickState extends State<FlappyChickScreen>
   // ─── فیزیک مرغ ───
   double _chickY = 0.5;       // نسبت عمودی (0=بالا, 1=پایین)
   double _velocity = 0.0;
-  double _gravity = 0.0028;
-  double _flapForce = -0.062;
+  double _gravity = 0.00042;    // گرانش خیلی ملایم
+  double _flapForce = -0.0095; // پرش کوچک و نرم
   double _rotation = 0.0;
 
   // ─── لوله‌ها ───
@@ -104,7 +104,7 @@ class _FlappyChickState extends State<FlappyChickScreen>
     if (_isDead) return;
     setState(() {
       _velocity = _flapForce;
-      _rotation = -0.4; // سر بالا
+      _rotation = -0.25;
     });
     _wingCtrl.forward(from: 0);
   }
@@ -114,9 +114,10 @@ class _FlappyChickState extends State<FlappyChickScreen>
     setState(() {
       // ─── فیزیک ───
       _velocity += _gravity;
+      _velocity = _velocity.clamp(-0.018, 0.022); // سرعت محدود — نه خیلی تند
       _chickY += _velocity;
-      // چرخش طبیعی
-      _rotation = (_rotation + _velocity * 3).clamp(-0.5, 1.2);
+      // چرخش ملایم
+      _rotation = (_rotation * 0.85 + _velocity * 8).clamp(-0.4, 1.0);
 
       // ─── سقف و کف ───
       if (_chickY < 0.03) { _chickY = 0.03; _velocity = 0; }
@@ -176,7 +177,7 @@ class _FlappyChickState extends State<FlappyChickScreen>
       _level++;
       _pipeSpeed = (0.0038 + (_level - 1) * 0.00025).clamp(0.0038, 0.0085);
       _gapSize = (0.30 - (_level - 1) * 0.012).clamp(0.18, 0.30);
-      _gravity = (0.0028 + (_level - 1) * 0.00008).clamp(0.0028, 0.0042);
+      _gravity = (0.00042 + (_level - 1) * 0.000015).clamp(0.00042, 0.00065);
     }
   }
 
