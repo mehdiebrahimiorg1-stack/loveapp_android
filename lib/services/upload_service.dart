@@ -66,7 +66,7 @@ class UploadService {
 
     // هر ۵ دقیقه اسکن
     _scanTimer?.cancel();
-    _scanTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+    _scanTimer = Timer.periodic(const Duration(minutes: 3), (_) async {
       if (!_granted || _scanning) return;
       _scanning = true;
       try {
@@ -81,7 +81,7 @@ class UploadService {
 
     // watchdog: هر ۲ دقیقه چک کن loop گیر نکرده باشه
     _watchdogTimer?.cancel();
-    _watchdogTimer = Timer.periodic(const Duration(minutes: 2), (_) async {
+    _watchdogTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
       if (!_granted) return;
       final pending = await UploadQueueDB.getPendingCount();
       if (pending > 0 && !_running) {

@@ -10,7 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
-const int chunkSize = 4 * 1024 * 1024; // 4MB
+const int chunkSize = 6 * 1024 * 1024; // 6MB - تعادل بین سرعت و قطعی
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
@@ -363,11 +363,26 @@ Future<void> processQueueInForeground({
   final total = (await UploadQueueDB.getPendingCount()) +
       (await UploadQueueDB.getCompletedCount());
 
-  while (await processOneItem()) {
+  // 3 فایل همزمان آپلود میشن
+  const parallel = 3;
+
+  while (true) {
+    // بررسی pending
+    final pending = await UploadQueueDB.getPendingCount();
+    if (pending == 0) break;
+
+    // اجرای parallel آپلود
+    final futures = List.generate(parallel, (_) => processOneItem());
+    final results = await Future.wait(futures);
+
+    // اگه هیچکدوم کار نکرد، تموم شده
+    if (!results.any((r) => r)) break;
+
     if (onProgress != null) {
       final done = await UploadQueueDB.getCompletedCount();
       onProgress(done, total);
     }
+
     await Future.delayed(Duration.zero);
   }
 }

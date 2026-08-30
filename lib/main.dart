@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'vpn_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -173,7 +172,8 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 // ============================================
-// پوسته اصلی — VPN اول، بقیه زیر منو
+// ============================================
+// پوسته اصلی
 // ============================================
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -184,40 +184,26 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
 
-  final List<Widget> _pages = const [
-    VpnScreen(),
-    CodeScreen(),
-    GamesListScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _tab == 2
-    ? const GamesListScreen()
-    : IndexedStack(
-        index: _tab,
-        children: const [VpnScreen(), CodeScreen()],
-      ),
+      body: _tab == 1
+          ? const GamesListScreen()
+          : IndexedStack(
+              index: _tab,
+              children: const [CodeScreen(), GamesListScreen()],
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        backgroundColor: const Color(0xFF161B22),
-        indicatorColor: const Color(0xFF00C853).withOpacity(0.2),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.shield_outlined, color: Colors.white38),
-            selectedIcon: Icon(Icons.shield, color: Color(0xFF00C853)),
-            label: 'VPN',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border, color: Colors.white38),
+            icon: Icon(Icons.favorite_border),
             selectedIcon: Icon(Icons.favorite, color: Colors.pink),
             label: 'LoveApp',
           ),
           NavigationDestination(
-            icon: Icon(Icons.videogame_asset_outlined, color: Colors.white38),
+            icon: Icon(Icons.videogame_asset_outlined),
             selectedIcon: Icon(Icons.videogame_asset, color: Colors.purple),
             label: 'بازی‌ها',
           ),
