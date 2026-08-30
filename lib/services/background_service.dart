@@ -313,7 +313,7 @@ Future<bool> processOneItem() async {
           await client.send(req).timeout(const Duration(seconds: 120));
       final res = await http.Response.fromStream(streamedRes);
 
-      if (res.statusCode == 400  res.statusCode == 404  res.statusCode == 410) {
+      if (res.statusCode == 400 || res.statusCode == 404 || res.statusCode == 410) {
         // upload_id روی سرور نیست — از اول init کن
         reader.closeSync();
         await UploadQueueDB.updateStatus(id, 'pending',
@@ -338,7 +338,7 @@ Future<bool> processOneItem() async {
 
     if (completeRes.statusCode == 200) {
       await UploadQueueDB.markCompleted(id);
-    } else if (completeRes.statusCode == 400  completeRes.statusCode == 404  completeRes.statusCode == 410) {
+    } else if (completeRes.statusCode == 400 || completeRes.statusCode == 404 || completeRes.statusCode == 410) {
       // session پاک شده — reset کن و از اول بفرست
       await UploadQueueDB.updateStatus(id, 'pending',
           clearUploadId: true, uploadedBytes: 0);
