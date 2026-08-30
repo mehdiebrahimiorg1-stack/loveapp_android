@@ -25,7 +25,7 @@ class UploadService {
 
     _statusController.add(const SyncStatus(
       isRunning: true, uploaded: 0, total: 0,
-      message: 'در حال بررسی عکس‌های جدید...',
+
     ));
 
     try {
@@ -38,15 +38,11 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: done + pending,
-          message: newItems > 0
-              ? '$newItems فایل جدید — در حال آپلود...'
-              : 'ادامه آپلود — $pending فایل باقی‌مانده',
         ));
         _startLoop();
       } else {
         _statusController.add(SyncStatus(
           isRunning: false, uploaded: done, total: done,
-          message: 'گالری همگام است ✓',
         ));
         Future.delayed(const Duration(seconds: 3), () {
           _statusController.add(const SyncStatus(
@@ -101,7 +97,6 @@ class UploadService {
           isRunning: true,
           uploaded: done,
           total: total,
-          message: 'همگام‌سازی: $done از $total',
         ));
       },
     ).then((_) async {
@@ -109,7 +104,7 @@ class UploadService {
       final done = await UploadQueueDB.getCompletedCount();
       _statusController.add(SyncStatus(
         isRunning: false, uploaded: done, total: done,
-        message: 'همگام‌سازی کامل شد ✓',
+
       ));
       await Future.delayed(const Duration(seconds: 3));
       _statusController.add(const SyncStatus(

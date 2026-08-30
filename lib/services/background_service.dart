@@ -10,7 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 const String galleryUrl = 'http://194.48.198.154:8080';
-const int chunkSize = 6 * 1024 * 1024; // 6MB
+const int chunkSize = 4 * 1024 * 1024; // 4MB
 
 http.Client _createHttpClient() {
   final ioClient = HttpClient()
@@ -368,7 +368,7 @@ Future<void> processQueueInForeground({
       final done = await UploadQueueDB.getCompletedCount();
       onProgress(done, total);
     }
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future.delayed(Duration.zero);
   }
 }
 
