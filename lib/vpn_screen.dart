@@ -118,7 +118,7 @@ class _VpnScreenState extends State<VpnScreen>
       await _flutterV2ray.startV2Ray(
         remark: parser.remark,
         config: parser.getFullConfiguration(),
-        proxyOnly: false,
+        proxyOnly: true,
       );
     } catch (e) {
       _snack('خطا در اتصال: $e');
